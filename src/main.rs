@@ -1,4 +1,6 @@
+use std::cmp;
 use std::convert::TryInto;
+use std::convert::TryFrom;
 use std::error::Error;
 use std::fmt;
 use std::fs::File;
@@ -9,10 +11,10 @@ use std::io::Cursor;
 use std::io::SeekFrom;
 use std::path::Path;
 
-use itertools::Itertools;
-use flate2::read::ZlibDecoder;
 use bincode::config as bincode_config;
 use clap::{App, Arg, SubCommand};
+use flate2::read::ZlibDecoder;
+use itertools::Itertools;
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 use plist::Value;
@@ -79,11 +81,11 @@ struct UDIFChecksum {
 }
 
 #[repr(u32)]
-#[derive(FromPrimitive, Debug)]
+#[derive(FromPrimitive, Debug, PartialEq)]
 enum ChunkType {
-    //Zero = 0x00000000,
-    //Raw = 0x00000001,
-    //Ignore = 0x00000002,
+    Zero = 0x00000000,
+    Raw = 0x00000001,
+    Ignore = 0x00000002,
     //Comment = 0x7ffffffe,
 
     //ADV = 0x80000004,
@@ -91,7 +93,7 @@ enum ChunkType {
     //BZLIB = 0x80000006,
     //LZFSE = 0x80000007,
 
-    //Term = 0xffffffff,
+    Term = 0xffffffff,
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
@@ -100,8 +102,8 @@ struct BLKXChunk {
     comment: u32,
     sector_number: u64,
     sector_count: u64,
-    offset: u64,
-    length: u64,
+    compressed_offset: u64,
+    compressed_length: u64,
 }
 
 impl fmt::Display for BLKXChunk {
@@ -117,7 +119,12 @@ impl fmt::Display for BLKXChunk {
              \t\t\t# sectors: {}\n\
              \t\t\tOffset:    {:#010x}\n\
              \t\t\tLength:    {:#010x}",
-            self.r#type, type_str, self.comment, self.sector_count, self.offset, self.length
+            self.r#type,
+            type_str,
+            self.comment,
+            self.sector_count,
+            self.compressed_offset,
+            self.compressed_length
         )
     }
 }
@@ -265,16 +272,26 @@ where
         }
     }
 
-    pub fn extract_all(&mut self) -> Result<(), String> {
+    pub fn extract_all<W>(&mut self, mut output: W) -> Result<(), String>
+    where
+        W: Write + Seek,
+    {
         println!("extracting all partitions");
 
         for i in 0..self.partitions.len() {
-            self.extract_partition(i)?
+            self.extract_partition(&mut output, i)?
         }
         Ok(())
     }
 
-    pub fn extract_partition(&mut self, partition_num: usize) -> Result<(), String> {
+    pub fn extract_partition<W>(
+        &mut self,
+        mut output: W,
+        partition_num: usize,
+    ) -> Result<(), String>
+    where
+        W: Write + Seek,
+    {
         let partition = match self.partitions.get(partition_num) {
             Some(val) => val,
             None => {
@@ -291,6 +308,29 @@ where
 
         println!("{}", partition);
 
+        let max_compressed_length: usize = partition
+            .blkx_table
+            .chunks
+            .iter()
+            .fold(0, |max, c| cmp::max(max, c.compressed_length))
+            .try_into()
+            .unwrap();;
+        let max_sector_count: usize = partition
+            .blkx_table
+            .chunks
+            .iter()
+            .fold(0, |max, c| cmp::max(max, c.sector_count))
+            .try_into()
+            .unwrap();
+
+        println!(
+            "max_compressed_length={} max_sector_count={}",
+            max_compressed_length, max_sector_count
+        );
+
+        let mut inbuf = vec![0; max_compressed_length];
+        let mut outbuf = vec![0; max_sector_count * SECTOR_SIZE];
+
         for (chunk_num, chunk) in partition.blkx_table.chunks.iter().enumerate() {
             let chunk_type = match ChunkType::from_u32(chunk.r#type) {
                 Some(val) => val,
@@ -298,38 +338,90 @@ where
             };
 
             println!(
-                "chunk {}: type={:?} comment={} sector_number={} sector_count={} offset={} length={}",
+                "chunk {}: type={:?} comment={} sector_number={} sector_count={} compressed_offset={} compressed_length={}",
                 chunk_num,
                 chunk_type,
                 chunk.comment,
                 chunk.sector_number,
                 chunk.sector_count,
-                chunk.offset,
-                chunk.length
+                chunk.compressed_offset,
+                chunk.compressed_length
             );
 
-            match chunk_type {
-                ChunkType::ZLIB => self.decode_zlib(chunk)?
+            if chunk_type == ChunkType::Term {
+                println!("done");
+                return Ok(());
+            }
+
+            // position input at start of chunk
+            if let Err(_) = self.input.seek(SeekFrom::Start(chunk.compressed_offset)) {
+                return Err(format!("invalid offset: {}", chunk.compressed_offset));
+            }
+
+            let in_len: usize = chunk.compressed_length.try_into().unwrap();
+            let out_len = usize::try_from(chunk.sector_count).unwrap() * SECTOR_SIZE;
+
+            // read compressed chunk
+            if let Err(_) = self.input.read_exact(&mut inbuf[0..in_len]) {
+                return Err(format!("could not read {} bytes from input", in_len));
+            }
+
+            // position output writer
+            if let Err(_) = output.seek(SeekFrom::Start(
+                chunk.sector_number * u64::try_from(SECTOR_SIZE).unwrap(),
+            )) {
+                return Err(format!("invalid offset: {}", chunk.compressed_offset));
+            }
+
+            // decompress
+            let bytes_read = match chunk_type {
+                ChunkType::Ignore | ChunkType::Zero => fill_zero(&mut outbuf[0..out_len]),
+                ChunkType::Raw => copy(&inbuf[0..in_len], &mut outbuf[0..out_len]),
+                ChunkType::ZLIB => decode_zlib(&inbuf[0..in_len], &mut outbuf[0..out_len]),
+                ChunkType::Term => return Ok(()) // cannot happen
+            };
+
+            match bytes_read {
+                None => return Err(format!("error decompressing chunk")),
+                Some(val) if val != out_len => {
+                    return Err(format!(
+                        "error decompressing chunk (read only {} of {} bytes)",
+                        val, out_len
+                    ))
+                }
+                Some(val) => println!("decompressed {} bytes", val),
+            };
+
+            // write to ouput
+            if let Err(err) = output.write_all(&outbuf[0..out_len]) {
+                return Err(format!("failed to write to output: {}", err))
             }
         }
 
         Ok(())
     }
+}
 
-    fn decode_zlib(&mut self, chunk: &BLKXChunk) -> Result<(), String> {
-        if let Err(_) = self.input.seek(SeekFrom::Start(chunk.offset)) {
-            return Err(format!("invalid offset: {}", chunk.offset));
-        }
-        // allocate buffer for chunk
-        let mut buf: Vec<u8> = vec![0; chunk.length.try_into().unwrap()];
-        // read compressed chunk
-        if let Err(_) = self.input.read_exact(&mut buf) {
-            return Err(format!("could not read {} bytes from input", chunk.length));
-        }
-        let mut z = ZlibDecoder::new(&buf[..]);
-        Ok(())
+fn decode_zlib(inbuf: &[u8], outbuf: &mut [u8]) -> Option<usize> {
+    let mut z = ZlibDecoder::new(&inbuf[..]);
+    match z.read_exact(outbuf) {
+        Err(_) => return None,
+        Ok(_) => Some(outbuf.len()),
     }
 }
+
+fn fill_zero(outbuf: &mut [u8]) -> Option<usize> {
+    for i in &mut outbuf[..] { 
+        *i = 0
+    }
+    Some(outbuf.len())
+}
+
+fn copy(inbuf: &[u8], outbuf: &mut [u8]) -> Option<usize> {
+    outbuf.copy_from_slice(inbuf);
+    Some(outbuf.len())
+}
+
 
 fn main() {
     let matches = App::new("dmgwiz")
@@ -358,6 +450,13 @@ fn main() {
                         .short("p")
                         .required(false)
                         .help("partition number (see info command)"),
+                )
+                .arg(
+                    Arg::with_name("output")
+                        .takes_value(true)
+                        .short("o")
+                        .required(true)
+                        .help("output file"),
                 ),
         )
         .subcommand(
@@ -434,15 +533,27 @@ fn main() {
         if let Some(_) = matches.subcommand_matches("info") {
             wiz.info();
         } else if let Some(matches) = matches.subcommand_matches("extract") {
+            let out_file = matches.value_of("output").unwrap();
+            let out_path = Path::new(out_file);
+            let output = match File::create(&out_path) {
+                Err(why) => panic!(
+                    "couldn't open {}: {}",
+                    out_path.display(),
+                    why.description()
+                ),
+                Ok(file) => file,
+            };
+            let buf_writer = &mut BufWriter::new(output);
+
             let res;
             if let Some(partition_str) = matches.value_of("partition") {
                 let partition_num: usize = match partition_str.parse() {
                     Ok(val) => val,
                     Err(_) => panic!(format!("invalid partition number: {}", partition_str)),
                 };
-                res = wiz.extract_partition(partition_num)
+                res = wiz.extract_partition(buf_writer, partition_num)
             } else {
-                res = wiz.extract_all();
+                res = wiz.extract_all(buf_writer);
             }
 
             if let Err(err) = res {

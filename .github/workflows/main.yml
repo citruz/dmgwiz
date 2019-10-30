@@ -1,4 +1,4 @@
-name: CI
+name: Build and Test
 on: [push, pull_request]
 
 jobs:
@@ -44,6 +44,9 @@ jobs:
         curl https://sh.rustup.rs | sh -s -- -y
         echo "##[add-path]$HOME/.cargo/bin"
       if: matrix.os == 'macos-latest'
+    - name: Install Perl (Windows)
+      run: choco install activeperl
+      if: matrix.os == 'windows-latest'
     - run: cargo test
 
   rustfmt:

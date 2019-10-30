@@ -17,3 +17,5 @@ plist = "0.5"
 num-traits = "0.2"
 num-derive = "0.3"
 flate2 = "1.0.12"
+bzip2 = "0.3.3"
+lzfse = { version = "0.0.1", path = "lzfse-rs" }

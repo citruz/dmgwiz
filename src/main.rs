@@ -1,6 +1,6 @@
 use std::cmp;
-use std::convert::TryInto;
 use std::convert::TryFrom;
+use std::convert::TryInto;
 use std::error::Error;
 use std::fmt;
 use std::fs::File;
@@ -12,13 +12,16 @@ use std::io::SeekFrom;
 use std::path::Path;
 
 use bincode::config as bincode_config;
+use bzip2::read::BzDecoder;
 use clap::{App, Arg, SubCommand};
 use flate2::read::ZlibDecoder;
 use itertools::Itertools;
+use lzfse::decode_buffer as lzfse_decode_buffer;
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 use plist::Value;
 use serde::{Deserialize, Serialize};
+
 mod decrypt;
 use decrypt::EncryptedDmgReader;
 
@@ -90,8 +93,8 @@ enum ChunkType {
 
     //ADV = 0x80000004,
     ZLIB = 0x80000005,
-    //BZLIB = 0x80000006,
-    //LZFSE = 0x80000007,
+    BZLIB = 0x80000006,
+    LZFSE = 0x80000007,
 
     Term = 0xffffffff,
 }
@@ -329,7 +332,8 @@ where
         );
 
         let mut inbuf = vec![0; max_compressed_length];
-        let mut outbuf = vec![0; max_sector_count * SECTOR_SIZE];
+        // need to add one additional byte for lzfse decompression
+        let mut outbuf = vec![0; (max_sector_count * SECTOR_SIZE) + 1];
 
         for (chunk_num, chunk) in partition.blkx_table.chunks.iter().enumerate() {
             let chunk_type = match ChunkType::from_u32(chunk.r#type) {
@@ -378,7 +382,10 @@ where
                 ChunkType::Ignore | ChunkType::Zero => fill_zero(&mut outbuf[0..out_len]),
                 ChunkType::Raw => copy(&inbuf[0..in_len], &mut outbuf[0..out_len]),
                 ChunkType::ZLIB => decode_zlib(&inbuf[0..in_len], &mut outbuf[0..out_len]),
-                ChunkType::Term => return Ok(()) // cannot happen
+                ChunkType::BZLIB => decode_bzlib(&inbuf[0..in_len], &mut outbuf[0..out_len]),
+                // lzfse buffer needs to be one byte larger to tell if the buffer was large enough
+                ChunkType::LZFSE => decode_lzfse(&inbuf[0..in_len], &mut outbuf[0..(out_len + 1)]),
+                ChunkType::Term => return Ok(()), // cannot happen
             };
 
             match bytes_read {
@@ -394,7 +401,7 @@ where
 
             // write to ouput
             if let Err(err) = output.write_all(&outbuf[0..out_len]) {
-                return Err(format!("failed to write to output: {}", err))
+                return Err(format!("failed to write to output: {}", err));
             }
         }
 
@@ -410,8 +417,23 @@ fn decode_zlib(inbuf: &[u8], outbuf: &mut [u8]) -> Option<usize> {
     }
 }
 
+fn decode_bzlib(inbuf: &[u8], outbuf: &mut [u8]) -> Option<usize> {
+    let mut z = BzDecoder::new(&inbuf[..]);
+    match z.read_exact(outbuf) {
+        Err(_) => None,
+        Ok(_) => Some(outbuf.len()),
+    }
+}
+
+fn decode_lzfse(inbuf: &[u8], outbuf: &mut [u8]) -> Option<usize> {
+    match lzfse_decode_buffer(inbuf, outbuf) {
+        Err(_) => None,
+        Ok(val) => Some(val),
+    }
+}
+
 fn fill_zero(outbuf: &mut [u8]) -> Option<usize> {
-    for i in &mut outbuf[..] { 
+    for i in &mut outbuf[..] {
         *i = 0
     }
     Some(outbuf.len())
@@ -421,7 +443,6 @@ fn copy(inbuf: &[u8], outbuf: &mut [u8]) -> Option<usize> {
     outbuf.copy_from_slice(inbuf);
     Some(outbuf.len())
 }
-
 
 fn main() {
     let matches = App::new("dmgwiz")

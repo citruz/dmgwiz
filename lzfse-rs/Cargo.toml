@@ -1,0 +1,7 @@
+[package]
+name = "lzfse"
+version = "0.0.1"
+
+[dependencies]
+lzfse-sys = { version = "0.0.1", path = "lzfse-sys" }
+libc = "0.2"

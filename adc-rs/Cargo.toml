@@ -1,0 +1,6 @@
+[package]
+name = "adc"
+version = "0.0.1"
+
+[dependencies]
+bincode = "1.2.0"

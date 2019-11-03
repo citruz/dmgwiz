@@ -11,6 +11,7 @@ use std::io::Cursor;
 use std::io::SeekFrom;
 use std::path::Path;
 
+use adc::AdcDecoder;
 use bincode::config as bincode_config;
 use bzip2::read::BzDecoder;
 use clap::{App, Arg, SubCommand};
@@ -91,7 +92,7 @@ enum ChunkType {
     Ignore = 0x00000002,
     //Comment = 0x7ffffffe,
 
-    //ADV = 0x80000004,
+    ADC = 0x80000004,
     ZLIB = 0x80000005,
     BZLIB = 0x80000006,
     LZFSE = 0x80000007,
@@ -381,6 +382,7 @@ where
             let bytes_read = match chunk_type {
                 ChunkType::Ignore | ChunkType::Zero => fill_zero(&mut outbuf[0..out_len]),
                 ChunkType::Raw => copy(&inbuf[0..in_len], &mut outbuf[0..out_len]),
+                ChunkType::ADC => decode_adc(&inbuf[0..in_len], &mut outbuf[0..out_len]),
                 ChunkType::ZLIB => decode_zlib(&inbuf[0..in_len], &mut outbuf[0..out_len]),
                 ChunkType::BZLIB => decode_bzlib(&inbuf[0..in_len], &mut outbuf[0..out_len]),
                 // lzfse buffer needs to be one byte larger to tell if the buffer was large enough
@@ -429,6 +431,14 @@ fn decode_lzfse(inbuf: &[u8], outbuf: &mut [u8]) -> Option<usize> {
     match lzfse_decode_buffer(inbuf, outbuf) {
         Err(_) => None,
         Ok(val) => Some(val),
+    }
+}
+
+fn decode_adc(inbuf: &[u8], outbuf: &mut [u8]) -> Option<usize> {
+    let mut z = AdcDecoder::new(&inbuf[..]);
+    match z.decompress_into(outbuf) {
+        Ok(val) => Some(val),
+        Err(_) => None,
     }
 }
 

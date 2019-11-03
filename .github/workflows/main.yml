@@ -69,10 +69,10 @@ jobs:
       run: rm -rf ./target/release/{build, deps}
       shell: bash
     - name: Upload artifacts
-        uses: actions/upload-artifact@v1
-        with:
-          name: dmgwiz_release
-          path: ./target/release/
+      uses: actions/upload-artifact@v1
+      with:
+        name: dmgwiz_release
+        path: ./target/release/
 
   rustfmt:
     name: Rustfmt

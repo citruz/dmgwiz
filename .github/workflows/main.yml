@@ -63,6 +63,16 @@ jobs:
       working-directory: ./lzfse-rs
     - name: Run Cargo Test (dmgwiz)
       run: cargo test
+    - name: Build release binary
+      run: cargo build --release
+    - name: Delete intermediate files
+      run: rm -rf ./target/release/{build, deps}
+      shell: bash
+    - name: Upload artifacts
+        uses: actions/upload-artifact@v1
+        with:
+          name: dmgwiz_release
+          path: ./target/release/
 
   rustfmt:
     name: Rustfmt

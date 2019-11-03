@@ -127,8 +127,6 @@ impl<R: Read> AdcDecoder<R> {
 
 #[cfg(test)]
 mod tests {
-    use std::io::prelude::*;
-
     use AdcDecoder;
     use AdcError;
 

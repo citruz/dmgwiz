@@ -31,9 +31,9 @@ jobs:
           #- build: win32-gnu
           #  os: windows-latest
           #  rust: stable-i686-gnu
-          - build: win64-gnu
-            os: windows-latest
-            rust: stable-x86_64-gnu
+          #- build: win64-gnu
+          #  os: windows-latest
+          #  rust: stable-x86_64-gnu
     steps:
     - uses: actions/checkout@master
     - name: Install Rust (rustup)

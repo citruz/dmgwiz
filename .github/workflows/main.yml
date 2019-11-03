@@ -49,7 +49,7 @@ jobs:
       run: |
         choco install activeperl
         echo "##[add-path]C:\Perl64\bin"
-      if: matrix.os == 'windows-latest'
+      if: matrix.build == 'win64'
     - name: Test Perl (Windows)
       run: |
         Get-Command perl

@@ -7,7 +7,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        build: [stable, beta, nightly, macos, win32, win64, win32-gnu, win64-gnu]
+        build: [stable, beta, nightly, macos, win64]
+        #build: [stable, beta, nightly, macos, win32, win64, win32-gnu, win64-gnu]
         include:
           - build: stable
             os: ubuntu-latest
@@ -21,18 +22,18 @@ jobs:
           - build: macos
             os: macos-latest
             rust: stable
-          - build: win32
-            os: windows-latest
-            rust: stable-i686-msvc
+          #- build: win32
+          #  os: windows-latest
+          #  rust: stable-i686-msvc
           - build: win64
             os: windows-latest
             rust: stable-x86_64-msvc
-          - build: win32-gnu
-            os: windows-latest
-            rust: stable-i686-gnu
-          - build: win64-gnu
-            os: windows-latest
-            rust: stable-x86_64-gnu
+          #- build: win32-gnu
+          #  os: windows-latest
+          #  rust: stable-i686-gnu
+          #- build: win64-gnu
+          #  os: windows-latest
+          #  rust: stable-x86_64-gnu
     steps:
     - uses: actions/checkout@master
     - name: Install Rust (rustup)
@@ -45,9 +46,33 @@ jobs:
         echo "##[add-path]$HOME/.cargo/bin"
       if: matrix.os == 'macos-latest'
     - name: Install Perl (Windows)
-      run: choco install activeperl
+      run: |
+        choco install activeperl
+        echo "##[add-path]C:\Perl64\bin"
+      if: matrix.build == 'win64'
+    - name: Test Perl (Windows)
+      run: |
+        Get-Command perl
+        perl -v
       if: matrix.os == 'windows-latest'
-    - run: cargo test
+    - name: Run Cargo Test (ADC)
+      run: cargo test
+      working-directory: ./adc-rs
+    - name: Run Cargo Test (LZFSE)
+      run: cargo test
+      working-directory: ./lzfse-rs
+    - name: Run Cargo Test (dmgwiz)
+      run: cargo test
+    - name: Build release binary
+      run: cargo build --release
+    - name: Delete intermediate files
+      run: rm -rf ./target/release/{build,deps,incremental}
+      shell: bash
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v1
+      with:
+        name: dmgwiz_release_${{ matrix.build }}
+        path: ./target/release/
 
   rustfmt:
     name: Rustfmt

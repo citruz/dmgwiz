@@ -91,7 +91,6 @@ enum ChunkType {
     Raw = 0x00000001,
     Ignore = 0x00000002,
     //Comment = 0x7ffffffe,
-
     ADC = 0x80000004,
     ZLIB = 0x80000005,
     BZLIB = 0x80000006,

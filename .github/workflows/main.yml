@@ -45,10 +45,14 @@ jobs:
         echo "##[add-path]$HOME/.cargo/bin"
       if: matrix.os == 'macos-latest'
     - name: Install Perl (Windows)
-      run: choco install activeperl
+      run: |
+        choco install activeperl
+        echo "##[add-path]C:\Perl64\bin"
       if: matrix.os == 'windows-latest'
     - name: Test Perl (Windows)
-      run: Get-Command perl
+      run: |
+        Get-Command perl
+        perl -v
       if: matrix.os == 'windows-latest'
     - name: Run Cargo Test (ADC)
       run: cargo test

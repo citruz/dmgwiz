@@ -47,7 +47,17 @@ jobs:
     - name: Install Perl (Windows)
       run: choco install activeperl
       if: matrix.os == 'windows-latest'
-    - run: cargo test
+    - name: Test Perl (Windows)
+      run: Get-Command perl
+      if: matrix.os == 'windows-latest'
+    - name: Run Cargo Test (ADC)
+      run: cargo test
+      working-directory: ./adc-rs
+    - name: Run Cargo Test (LZFSE)
+      run: cargo test
+      working-directory: ./lzfse-rs
+    - name: Run Cargo Test (dmgwiz)
+      run: cargo test
 
   rustfmt:
     name: Rustfmt

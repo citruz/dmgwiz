@@ -66,12 +66,12 @@ jobs:
     - name: Build release binary
       run: cargo build --release
     - name: Delete intermediate files
-      run: rm -rf ./target/release/{build, deps}
+      run: rm -rf ./target/release/{build,deps,incremental}
       shell: bash
     - name: Upload artifacts
       uses: actions/upload-artifact@v1
       with:
-        name: dmgwiz_release
+        name: dmgwiz_release_${{ matrix.build }}
         path: ./target/release/
 
   rustfmt:

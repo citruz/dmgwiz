@@ -28,6 +28,9 @@ use decrypt::EncryptedDmgReader;
 
 const SECTOR_SIZE: usize = 512;
 
+trait ReadNSeek: Read + Seek {}
+impl<T: Read + Seek> ReadNSeek for T {}
+
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 struct KolyHeader {
     signature: [char; 4],
@@ -68,8 +71,8 @@ impl fmt::Display for Partition {
         write!(
             f,
             "Partition:\n\
-             \tName:      {}\n\
-             \tAttibutes: {}\n\
+             \tName:       {}\n\
+             \tAttributes: {}\n\
              \tBlkx Table:\n\
              {}\n",
             self.name, self.attributes, self.blkx_table
@@ -91,7 +94,6 @@ enum ChunkType {
     Raw = 0x00000001,
     Ignore = 0x00000002,
     //Comment = 0x7ffffffe,
-
     ADC = 0x80000004,
     ZLIB = 0x80000005,
     BZLIB = 0x80000006,
@@ -118,14 +120,16 @@ impl fmt::Display for BLKXChunk {
         };
         write!(
             f,
-            "\t\t\tType:      {:#010x} ({})\n\
-             \t\t\tComment:   {}\n\
-             \t\t\t# sectors: {}\n\
-             \t\t\tOffset:    {:#010x}\n\
-             \t\t\tLength:    {:#010x}",
+            "\t\t\tType:       {:#010x} ({})\n\
+             \t\t\tComment:    {}\n\
+             \t\t\tsector num: {}\n\
+             \t\t\t# sectors:  {}\n\
+             \t\t\tOffset:     {:#010x}\n\
+             \t\t\tLength:     {:#010x}",
             self.r#type,
             type_str,
             self.comment,
+            self.sector_number,
             self.sector_count,
             self.compressed_offset,
             self.compressed_length
@@ -294,7 +298,7 @@ where
         partition_num: usize,
     ) -> Result<(), String>
     where
-        W: Write + Seek,
+        W: Write,
     {
         let partition = match self.partitions.get(partition_num) {
             Some(val) => val,
@@ -305,12 +309,21 @@ where
                 ))
             }
         };
+
         println!(
             "extracting partition {} \"{}\"",
             partition_num, partition.name
         );
 
         println!("{}", partition);
+
+        if partition.blkx_table.data_offset != 0 {
+            // data_offset always seems to be 0, let's just be sure
+            return Err(format!(
+                "invalid data offset of partition {}: {}",
+                partition_num, partition.blkx_table.data_offset
+            ));
+        }
 
         let max_compressed_length: usize = partition
             .blkx_table
@@ -335,6 +348,8 @@ where
         let mut inbuf = vec![0; max_compressed_length];
         // need to add one additional byte for lzfse decompression
         let mut outbuf = vec![0; (max_sector_count * SECTOR_SIZE) + 1];
+
+        let mut sectors_written = 0;
 
         for (chunk_num, chunk) in partition.blkx_table.chunks.iter().enumerate() {
             let chunk_type = match ChunkType::from_u32(chunk.r#type) {
@@ -371,11 +386,22 @@ where
                 return Err(format!("could not read {} bytes from input", in_len));
             }
 
-            // position output writer
-            if let Err(_) = output.seek(SeekFrom::Start(
-                chunk.sector_number * u64::try_from(SECTOR_SIZE).unwrap(),
-            )) {
-                return Err(format!("invalid offset: {}", chunk.compressed_offset));
+            // usually sectors are consecutive, but let's check to be sure.
+            // if chunk.sector_number is less than what we have alreay written, we have a problem.
+            // otherwise just write NULL sectors.
+            if chunk.sector_number < sectors_written {
+                return Err(format!(
+                    "invalid sector number: {} (partition={} chunk={})",
+                    chunk.sector_number, partition_num, chunk_num
+                ));
+            } else if chunk.sector_number > sectors_written {
+                let padding_sectors = chunk.sector_number - sectors_written;
+                let padding = vec![0; SECTOR_SIZE];
+                for _ in 0..padding_sectors {
+                    if let Err(err) = output.write_all(&padding) {
+                        return Err(format!("failed to write to output: {}", err));
+                    }
+                }
             }
 
             // decompress
@@ -405,6 +431,7 @@ where
             if let Err(err) = output.write_all(&outbuf[0..out_len]) {
                 return Err(format!("failed to write to output: {}", err));
             }
+            sectors_written += chunk.sector_count;
         }
 
         Ok(())
@@ -470,6 +497,12 @@ fn main() {
                 .short("v")
                 .multiple(true)
                 .help("Sets the level of verbosity"),
+        )
+        .arg(
+            Arg::with_name("password")
+                .short("p")
+                .takes_value(true)
+                .help("Password for encrypted DMGs"),
         )
         .subcommand(SubCommand::with_name("info").about("show dmg properties"))
         .subcommand(
@@ -556,7 +589,11 @@ fn main() {
             Ok(bytes_written) => println!("written {} bytes", bytes_written),
         };
     } else {
-        let buf_reader = &mut BufReader::new(input);
+        let input_real: Box<dyn ReadNSeek> = match matches.value_of("password") {
+            None => Box::new(input),
+            Some(password) => Box::new(EncryptedDmgReader::from_reader(input, password).unwrap()),
+        };
+        let buf_reader = &mut BufReader::new(input_real);
         let mut wiz = match DmgWiz::from_reader(buf_reader) {
             Err(err) => panic!("Error while reading dmg: {}", err),
             Ok(val) => val,

@@ -1,3 +1,4 @@
+use std::cmp;
 use std::convert::TryInto;
 use std::io::prelude::*;
 use std::io::SeekFrom;
@@ -12,6 +13,8 @@ use ring::pbkdf2;
 use serde::{Deserialize, Serialize};
 
 static PBKDF2_ALG: pbkdf2::Algorithm = pbkdf2::PBKDF2_HMAC_SHA1;
+
+use std::io::{Error, ErrorKind};
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 struct EncryptedDmgHeader {
@@ -50,6 +53,9 @@ pub struct EncryptedDmgReader<R> {
     hmacsha1_key: Vec<u8>,
     reader: R,
     block_cipher: Cipher,
+    chunk_size: usize,
+    data_size: usize,
+    cur_pos: usize,
 }
 
 impl<R> EncryptedDmgReader<R>
@@ -96,11 +102,14 @@ where
         };
 
         Ok(EncryptedDmgReader {
-            header: header,
             aes_key: aes_key.to_vec(),
             hmacsha1_key: hmacsha1_key.to_vec(),
             reader: reader,
             block_cipher: cipher,
+            data_size: header.datasize.try_into().unwrap(),
+            chunk_size: header.blocksize.try_into().unwrap(),
+            header: header,
+            cur_pos: 0,
         })
     }
 
@@ -115,9 +124,7 @@ where
             ));
         };
 
-        let chunk_size: usize = self.header.blocksize.try_into().unwrap();
-        let data_size: usize = self.header.datasize.try_into().unwrap();
-        let mut buffer: Vec<u8> = vec![0; chunk_size];
+        let mut buffer: Vec<u8> = vec![0; self.chunk_size];
         let mut chunk_no = 0;
         let mut bytes_written: usize = 0;
         loop {
@@ -127,8 +134,8 @@ where
                 Ok(val) => val,
             };
             let mut data = self.decrypt_chunk(&buffer, chunk_no)?;
-            if (data_size - bytes_written) < chunk_size {
-                data.truncate(data_size - bytes_written);
+            if (self.data_size - bytes_written) < self.chunk_size {
+                data.truncate(self.data_size - bytes_written);
             }
             bytes_written += match output.write(&data) {
                 Err(err) => return Err(format!("could not write: {}", err)),
@@ -227,6 +234,83 @@ where
         match signer.sign_to_vec() {
             Err(err) => Err(format!("Error calculating HMAC: {}", err)),
             Ok(val) => Ok(val[..16].to_vec()),
+        }
+    }
+}
+
+impl<R: Read + Seek> std::io::Read for EncryptedDmgReader<R> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        //println!("EncryptedDmgReader: got read with len={} cur_pos={} data_size={}", buf.len(), self.cur_pos, self.data_size);
+
+        if self.cur_pos >= self.data_size || buf.len() == 0 {
+            // EOF
+            return Ok(0);
+        }
+
+        // starting chunk
+        let mut chunk_no = self.cur_pos / self.chunk_size;
+        // offset in starting chunk
+        let mut chunk_offset = self.cur_pos % self.chunk_size;
+        // total bytes to read
+        let mut bytes_to_read = cmp::min(buf.len(), self.data_size - self.cur_pos);
+        // bytes written to buffer
+        let mut bytes_written = 0;
+        let mut buffer: Vec<u8> = vec![0; self.chunk_size];
+
+        if let Err(err) = self.reader.seek(SeekFrom::Start(
+            self.header.dataoffset + (self.chunk_size as u64) * (chunk_no as u64),
+        )) {
+            return Err(Error::new(ErrorKind::UnexpectedEof, err));
+        };
+
+        while bytes_to_read > 0 {
+            //println!("chunk_no={} chunk_offset={} bytes_to_read={}", chunk_no, chunk_offset, bytes_to_read);
+
+            if self.reader.read(&mut buffer)? == 0 {
+                // reached eof of underlying reader
+                return Ok(bytes_written);
+            }
+
+            let mut data = match self.decrypt_chunk(&buffer, chunk_no as u32) {
+                Err(err) => return Err(Error::new(ErrorKind::InvalidData, err)),
+                Ok(val) => val,
+            };
+            if chunk_offset + bytes_to_read < self.chunk_size {
+                data.truncate(chunk_offset + bytes_to_read);
+            }
+            //bytes_written+data.len()-chunk_offset
+            let new_bytes = data.len() - chunk_offset;
+            buf[bytes_written..bytes_written + new_bytes].copy_from_slice(&data[chunk_offset..]);
+            bytes_to_read -= new_bytes;
+            bytes_written += new_bytes;
+
+            chunk_no += 1;
+            chunk_offset = 0;
+        }
+
+        self.cur_pos += bytes_written;
+        Ok(bytes_written)
+    }
+}
+
+impl<R> std::io::Seek for EncryptedDmgReader<R> {
+    fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
+        let new_pos: i64 = match pos {
+            SeekFrom::Start(val) => val as i64,
+            SeekFrom::End(val) => self.data_size as i64 + val,
+            SeekFrom::Current(val) => self.cur_pos as i64 + val,
+        };
+
+        if new_pos < 0 {
+            Err(Error::new(
+                ErrorKind::InvalidInput,
+                "seeking to negative position",
+            ))
+        } else {
+            // according to docs seeking beyond the end should not be an error hence we allow it
+            //println!("EncryptedDmgReader: seeking to {}", new_pos);
+            self.cur_pos = new_pos as usize;
+            Ok(self.cur_pos as u64)
         }
     }
 }

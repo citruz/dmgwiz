@@ -53,7 +53,7 @@ mod tests {
 
     #[test]
     fn round_trip() {
-        let input:Vec<u8> = (0..1024).map(|_| { rand::random::<u8>() }).collect();
+        let input: Vec<u8> = (0..1024).map(|_| rand::random::<u8>()).collect();
         // lzfse will fallback to return the input uncompressed and add a magic header to indicate this
         // this requires 12 byte (see lzfse_encode.c)
         let max_outlen = input.len() + 12;
@@ -61,7 +61,7 @@ mod tests {
 
         let bytes_out = encode_buffer(&input[..], &mut compressed[..]).unwrap();
         assert_ne!(bytes_out, 0);
-    
+
         // need to allocate 1 byte more since lzfse returns input.len() if the buffer is too small 🤷‍♂️
         let mut uncompressed = vec![0; input.len() + 1];
         let bytes_in = decode_buffer(&compressed[0..bytes_out], &mut uncompressed[..]).unwrap();
@@ -72,7 +72,7 @@ mod tests {
 
     #[test]
     fn decode_buffer_to_small() {
-        let input:Vec<u8> = (0..1024).map(|_| { rand::random::<u8>() }).collect();
+        let input: Vec<u8> = (0..1024).map(|_| rand::random::<u8>()).collect();
         // lzfse will fallback to return the input uncompressed and add a magic header to indicate this
         // this requires 12 byte (see lzfse_encode.c)
         let max_outlen = input.len() + 12;
@@ -80,7 +80,7 @@ mod tests {
 
         let bytes_out = encode_buffer(&input[..], &mut compressed[..]).unwrap();
         assert_ne!(bytes_out, 0);
-    
+
         // this is one byte too small
         let mut uncompressed = vec![0; input.len()];
         let result = decode_buffer(&compressed[0..bytes_out], &mut uncompressed[..]);

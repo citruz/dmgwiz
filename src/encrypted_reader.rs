@@ -17,7 +17,7 @@ static PBKDF2_ALG: pbkdf2::Algorithm = pbkdf2::PBKDF2_HMAC_SHA1;
 use std::io::{Error, ErrorKind};
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
-struct EncryptedDmgHeader {
+pub struct EncryptedDmgHeader {
     signature: [char; 8],
     version: u32,
     enc_iv_size: u32,
@@ -45,6 +45,12 @@ struct EncryptedDmgHeader {
     encrypted_keyblob_size: u32,
     encrypted_keyblob1: [u8; 32],
     encrypted_keyblob2: [u8; 32],
+}
+
+impl EncryptedDmgHeader {
+    pub fn get_signature(&self) -> String {
+        self.signature.iter().collect::<String>()
+    }
 }
 
 pub struct EncryptedDmgReader<R> {

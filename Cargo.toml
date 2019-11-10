@@ -4,10 +4,8 @@ version = "0.1.0"
 authors = ["Felix Seele <fseele@gmail.com>"]
 edition = "2018"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
-itertools = "0.8.0"
+itertools = "0.8.1"
 clap = "2.33.0"
 bincode = "1.2.0"
 serde = { version = "1.0", features = ["derive"] }
@@ -20,3 +18,11 @@ flate2 = "1.0.12"
 bzip2 = "0.3.3"
 lzfse = { version = "0.0.1", path = "lzfse-rs" }
 adc = { version = "0.0.1", path = "adc-rs" }
+
+[lib]
+name = "dmgwiz"
+path = "src/lib.rs"
+
+[[bin]]
+name = "dmgwiz"
+path = "src/main.rs"

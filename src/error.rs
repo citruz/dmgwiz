@@ -57,7 +57,9 @@ impl fmt::Display for Error {
             Error::InvalidPartition(num_partition) => {
                 write!(f, "partition {} does not exist", num_partition)
             }
-            Error::UnsupportedEncryption(ref str) => write!(f, "unsupported encryption parameters: {}", str),
+            Error::UnsupportedEncryption(ref str) => {
+                write!(f, "unsupported encryption parameters: {}", str)
+            }
             Error::InvalidPassword => write!(f, "invalid password given"),
             Error::Decryption(_) => write!(f, "error during decryption"),
             Error::Decompress {

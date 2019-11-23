@@ -270,7 +270,12 @@ impl<R: Read + Seek> std::io::Read for EncryptedDmgReader<R> {
             }
 
             let mut data = match self.decrypt_chunk(&buffer, chunk_no as u32) {
-                Err(_) => return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "could not decrypt")),
+                Err(_) => {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "could not decrypt",
+                    ))
+                }
                 Ok(val) => val,
             };
             if chunk_offset + bytes_to_read < self.chunk_size {

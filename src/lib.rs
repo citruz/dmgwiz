@@ -347,7 +347,7 @@ where
             partition.name
         );
 
-        println!("{}", partition);
+        printDebug!(self, "{}", partition);
 
         if partition.blkx_table.data_offset != 0 {
             // data_offset always seems to be 0, let's just be sure
@@ -399,7 +399,8 @@ where
             }
 
             // position input at start of chunk
-            self.input.seek(SeekFrom::Start(self.data_offset + chunk.compressed_offset))?;
+            self.input
+                .seek(SeekFrom::Start(self.data_offset + chunk.compressed_offset))?;
 
             let in_len = chunk.compressed_length as usize;
             let out_len = chunk.sector_count as usize * SECTOR_SIZE;

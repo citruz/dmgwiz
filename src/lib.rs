@@ -8,15 +8,17 @@ use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 use serde::{Deserialize, Serialize};
 use std::cmp;
-use std::error;
 use std::fmt;
 use std::io::prelude::*;
 use std::io::Cursor;
 use std::io::SeekFrom;
 
 mod encrypted_reader;
+mod error;
+
 use encrypted_reader::EncryptedDmgHeader;
 pub use encrypted_reader::EncryptedDmgReader;
+pub use error::{Error, Result};
 
 const SECTOR_SIZE: usize = 512;
 
@@ -189,74 +191,6 @@ impl fmt::Display for BLKXTable {
         )
     }
 }
-
-pub enum Error {
-    /// The was an IO error while reading or writing.
-    Io(std::io::Error),
-    /// There was an error parsing the DMG header or partition table. The file is most likely not a valid DMG.
-    Parse(Box<dyn error::Error>),
-    /// The DMG is encrypted. Use EncryptedDmgReader to read encrypted DMGs.
-    Encrypted,
-    /// The input is not a valid DMG file.
-    InvalidInput(String),
-    /// The partition number supplied is not valid.
-    InvalidPartition(usize),
-    /// There was an error while decompressing a data chunk.
-    Decompress {
-        partition_num: usize,
-        chunk_num: usize,
-        chunk_type: ChunkType,
-    },
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            Error::Encrypted => write!(f, "DMG seems to encrypted"),
-            Error::InvalidInput(ref str) => write!(f, "invalid input: {}", str),
-            Error::InvalidPartition(num_partition) => {
-                write!(f, "partition {} does not exist", num_partition)
-            }
-            Error::Decompress {
-                partition_num,
-                chunk_num,
-                ref chunk_type,
-            } => write!(
-                f,
-                "there was an error during decompression (partition={} chunk={} type={:?}",
-                partition_num, chunk_num, chunk_type
-            ),
-            Error::Io(ref e) => e.fmt(f),
-            Error::Parse(ref e) => e.fmt(f),
-        }
-    }
-}
-
-impl From<std::io::Error> for Error {
-    fn from(err: std::io::Error) -> Error {
-        Error::Io(err)
-    }
-}
-
-impl From<Box<bincode::ErrorKind>> for Error {
-    fn from(err: Box<bincode::ErrorKind>) -> Error {
-        match *err {
-            bincode::ErrorKind::Io(err) => Error::Io(err),
-            err => Error::Parse(Box::new(err)),
-        }
-    }
-}
-
-impl From<plist::Error> for Error {
-    fn from(err: plist::Error) -> Error {
-        match err.into_io() {
-            Ok(io_err) => Error::Io(io_err),
-            Err(err) => Error::Parse(Box::new(err)),
-        }
-    }
-}
-
-type Result<T> = std::result::Result<T, Error>;
 
 #[derive(PartialEq, Debug)]
 pub enum Verbosity {

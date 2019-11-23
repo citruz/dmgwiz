@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 static PBKDF2_ALG: pbkdf2::Algorithm = pbkdf2::PBKDF2_HMAC_SHA1;
 
-use std::io::{Error, ErrorKind};
+use super::{Error, Result};
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct EncryptedDmgHeader {
@@ -68,23 +68,32 @@ impl<R> EncryptedDmgReader<R>
 where
     R: Read + Seek,
 {
-    pub fn from_reader(mut reader: R, password: &str) -> Result<EncryptedDmgReader<R>, String> {
-        let header: EncryptedDmgHeader =
-            match bincode_config().big_endian().deserialize_from(&mut reader) {
-                Err(err) => return Err(format!("couldn't read: {:?}", err)),
-                Ok(header) => header,
-            };
+    pub fn from_reader(mut reader: R, password: &str) -> Result<EncryptedDmgReader<R>> {
+        let header: EncryptedDmgHeader = bincode_config()
+            .big_endian()
+            .deserialize_from(&mut reader)
+            .map_err(|err| Error::Parse(err))?;
 
-        println!("{:?}", header);
-        if header.signature.iter().collect::<String>() != "encrcdsa" {
-            return Err(format!(
-                "Invalid header signature: {:?}",
-                header.signature.iter().collect::<String>()
-            ));
+        //TODO println!("{:?}", header);
+        if header.get_signature() != "encrcdsa" {
+            return Err(Error::InvalidInput("could not parse header".to_string()));
         }
 
         if header.version != 2 {
-            return Err(format!("Invalid version: {:?}", header.version));
+            return Err(Error::UnsupportedEncryption(format!(
+                "unsupported header version {}",
+                header.version
+            )));
+        }
+
+        if header.blob_enc_algorithm != 17
+            || header.blob_enc_mode != 6
+            || header.blob_enc_padding != 7
+        {
+            return Err(Error::UnsupportedEncryption(format!(
+                "unsupported blob encryption parameters algorithm={} mode={} padding={}",
+                header.blob_enc_algorithm, header.blob_enc_mode, header.blob_enc_padding
+            )));
         }
 
         // generate 3des key from password
@@ -92,8 +101,8 @@ where
         let keyblob = Self::decrypt_keyblob(&header, &derived_key)?;
 
         // extract aes and hmac keys
-        let aes_key_size: usize = (header.data_enc_key_bits / 8).try_into().unwrap();
-        let hmac_key_size: usize = (header.hmac_key_bits / 8).try_into().unwrap();
+        let aes_key_size: usize = header.data_enc_key_bits as usize / 8;
+        let hmac_key_size: usize = header.hmac_key_bits as usize / 8;
 
         let aes_key = &keyblob[..aes_key_size];
         let hmacsha1_key = &keyblob[aes_key_size..aes_key_size + hmac_key_size];
@@ -104,7 +113,12 @@ where
         let cipher = match header.data_enc_key_bits {
             128 => Cipher::aes_128_cbc(),
             256 => Cipher::aes_256_cbc(),
-            val => return Err(format!("Invalid key size: {}", val)),
+            val => {
+                return Err(Error::UnsupportedEncryption(format!(
+                    "unsupported AES key size {}",
+                    val
+                )))
+            }
         };
 
         Ok(EncryptedDmgReader {
@@ -112,30 +126,25 @@ where
             hmacsha1_key: hmacsha1_key.to_vec(),
             reader: reader,
             block_cipher: cipher,
-            data_size: header.datasize.try_into().unwrap(),
-            chunk_size: header.blocksize.try_into().unwrap(),
+            data_size: header.datasize as usize,
+            chunk_size: header.blocksize as usize,
             header: header,
             cur_pos: 0,
         })
     }
 
-    pub fn read_all<W>(&mut self, mut output: W) -> Result<usize, String>
+    pub fn read_all<W>(&mut self, mut output: W) -> Result<usize>
     where
         W: Write,
     {
-        if let Err(err) = self.reader.seek(SeekFrom::Start(self.header.dataoffset)) {
-            return Err(format!(
-                "could not seek to data offset {:?}: {:?}",
-                self.header.dataoffset, err
-            ));
-        };
+        self.reader.seek(SeekFrom::Start(self.header.dataoffset))?;
 
         let mut buffer: Vec<u8> = vec![0; self.chunk_size];
         let mut chunk_no = 0;
         let mut bytes_written: usize = 0;
         loop {
             match self.reader.read(&mut buffer) {
-                Err(err) => return Err(format!("failed to read from file: {}", err)),
+                Err(err) => return Err(err.into()),
                 Ok(0) => break,
                 Ok(val) => val,
             };
@@ -143,32 +152,28 @@ where
             if (self.data_size - bytes_written) < self.chunk_size {
                 data.truncate(self.data_size - bytes_written);
             }
-            bytes_written += match output.write(&data) {
-                Err(err) => return Err(format!("could not write: {}", err)),
-                Ok(val) => val,
-            };
+            bytes_written += output.write(&data)?;
             chunk_no += 1;
         }
         Ok(bytes_written)
     }
 
-    fn derive_key(header: &EncryptedDmgHeader, password: &str) -> Result<Vec<u8>, String> {
+    fn derive_key(header: &EncryptedDmgHeader, password: &str) -> Result<Vec<u8>> {
         if header.kdf_algorithm != 103
             || header.kdf_prng_algorithm != 0
             || header.kdf_salt_len != 20
         {
-            return Err(format!(
-                "Invalid kdf parameters: kdf_algorithm={} kdf_prng_algorithm={} kdf_salt_len={} kdf_iteration_count={}",
+            return Err(Error::UnsupportedEncryption(format!(
+                "unsupported key-derivation parameters: algorithm={} prng_algorithm={} salt_len={} ",
                 header.kdf_algorithm,
                 header.kdf_prng_algorithm,
-                header.kdf_salt_len,
-                header.kdf_iteration_count));
+                header.kdf_salt_len)));
         }
 
-        let iterations = match NonZeroU32::new(header.kdf_iteration_count) {
-            Some(val) => val,
-            None => return Err("Iterations can't be zero".to_string()),
-        };
+        let iterations = NonZeroU32::new(header.kdf_iteration_count).ok_or(
+            Error::UnsupportedEncryption("iterations cannot be zero".to_string()),
+        )?;
+
         let mut derived_key = [0u8; 24];
         pbkdf2::derive(
             PBKDF2_ALG,
@@ -181,64 +186,51 @@ where
         Ok(derived_key.to_vec())
     }
 
-    fn decrypt_keyblob(header: &EncryptedDmgHeader, key: &[u8]) -> Result<Vec<u8>, String> {
+    fn decrypt_keyblob(header: &EncryptedDmgHeader, key: &[u8]) -> Result<Vec<u8>> {
         let cipher = Cipher::des_ede3_cbc();
         let mut iv = header.blob_enc_iv.to_vec();
         iv.truncate(header.blob_enc_iv_size.try_into().unwrap());
 
+        // rust does not support static array of > 32 elements
         let mut encrypted_keyblob = [
             header.encrypted_keyblob1.to_vec(),
             header.encrypted_keyblob2.to_vec(),
         ]
         .concat();
-        encrypted_keyblob.truncate(header.encrypted_keyblob_size.try_into().unwrap());
-        let keyblob = match openssl_decrypt(cipher, key, Some(&iv), &encrypted_keyblob) {
-            Ok(val) => val,
-            Err(err) => return Err(format!("error while decrypting keyblob: {:?}", err)),
-        };
+        encrypted_keyblob.truncate(header.encrypted_keyblob_size as usize);
+
+        // do decryption
+        let keyblob = openssl_decrypt(cipher, key, Some(&iv), &encrypted_keyblob)
+            .map_err(|_| Error::InvalidPassword)?;
+
         Ok(keyblob)
     }
 
-    fn decrypt_chunk(&self, data: &[u8], chunk_no: u32) -> Result<Vec<u8>, String> {
+    fn decrypt_chunk(&self, data: &[u8], chunk_no: u32) -> Result<Vec<u8>> {
         let iv: Vec<u8> = self.compute_iv(chunk_no)?;
 
         let mut decrypter =
-            match Crypter::new(self.block_cipher, Mode::Decrypt, &self.aes_key, Some(&iv)) {
-                Err(err) => return Err(format!("{}", err)),
-                Ok(val) => val,
-            };
+            Crypter::new(self.block_cipher, Mode::Decrypt, &self.aes_key, Some(&iv))?;
         decrypter.pad(false);
+
         let block_size = self.block_cipher.block_size();
         let mut plaintext = vec![0; data.len() + block_size];
 
-        let mut count = match decrypter.update(data, &mut plaintext) {
-            Err(err) => return Err(format!("{}", err)),
-            Ok(val) => val,
-        };
-        count += match decrypter.finalize(&mut plaintext[count..]) {
-            Err(err) => return Err(format!("{}", err)),
-            Ok(val) => val,
-        };
+        let mut count = decrypter.update(data, &mut plaintext)?;
+        count += decrypter.finalize(&mut plaintext[count..])?;
         plaintext.truncate(count);
         Ok(plaintext)
     }
 
-    fn compute_iv(&self, chunk_no: u32) -> Result<Vec<u8>, String> {
-        let key = match PKey::hmac(&self.hmacsha1_key) {
-            Err(err) => return Err(format!("Invalid HMAC key: {}", err)),
-            Ok(val) => val,
-        };
-        let mut signer = match Signer::new(MessageDigest::sha1(), &key) {
-            Err(err) => return Err(format!("Error initializing HMAC: {}", err)),
-            Ok(val) => val,
-        };
-        if let Err(err) =
-            signer.update(&bincode_config().big_endian().serialize(&chunk_no).unwrap())
-        {
-            return Err(format!("Error calculating HMAC: {}", err));
-        }
+    fn compute_iv(&self, chunk_no: u32) -> Result<Vec<u8>> {
+        let key = PKey::hmac(&self.hmacsha1_key)?;
+        let mut signer = Signer::new(MessageDigest::sha1(), &key)?;
+        signer.update(&bincode_config().big_endian().serialize(&chunk_no).unwrap())?;
+
         match signer.sign_to_vec() {
-            Err(err) => Err(format!("Error calculating HMAC: {}", err)),
+            Err(err) => Err(err.into()),
+            // TODO check if we can/should hardcode this
+            // TODO check vector length befpre taking slice
             Ok(val) => Ok(val[..16].to_vec()),
         }
     }
@@ -266,7 +258,7 @@ impl<R: Read + Seek> std::io::Read for EncryptedDmgReader<R> {
         if let Err(err) = self.reader.seek(SeekFrom::Start(
             self.header.dataoffset + (self.chunk_size as u64) * (chunk_no as u64),
         )) {
-            return Err(Error::new(ErrorKind::UnexpectedEof, err));
+            return Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, err));
         };
 
         while bytes_to_read > 0 {
@@ -278,7 +270,7 @@ impl<R: Read + Seek> std::io::Read for EncryptedDmgReader<R> {
             }
 
             let mut data = match self.decrypt_chunk(&buffer, chunk_no as u32) {
-                Err(err) => return Err(Error::new(ErrorKind::InvalidData, err)),
+                Err(_) => return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "could not decrypt")),
                 Ok(val) => val,
             };
             if chunk_offset + bytes_to_read < self.chunk_size {
@@ -308,8 +300,8 @@ impl<R> std::io::Seek for EncryptedDmgReader<R> {
         };
 
         if new_pos < 0 {
-            Err(Error::new(
-                ErrorKind::InvalidInput,
+            Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
                 "seeking to negative position",
             ))
         } else {

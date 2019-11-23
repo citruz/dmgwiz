@@ -7,7 +7,7 @@ use std::path::Path;
 
 use clap::{App, Arg, SubCommand};
 
-use dmgwiz::{DmgWiz, EncryptedDmgReader};
+use dmgwiz::{DmgWiz, EncryptedDmgReader, Verbosity};
 
 trait ReadNSeek: Read + Seek {}
 impl<T: Read + Seek> ReadNSeek for T {}
@@ -82,14 +82,10 @@ fn main() {
     };
     println!("Using input file: {}", in_file);
 
-    // Vary the output based on how many times the user used the "verbose" flag
-    // (i.e. 'myprog -v -v -v' or 'myprog -vvv' vs 'myprog -v'
-    match matches.occurrences_of("v") {
-        0 => println!("No verbose info"),
-        1 => println!("Some verbose info"),
-        2 => println!("Tons of verbose info"),
-        3 | _ => println!("Don't be crazy"),
-    }
+    let verbosity = match matches.occurrences_of("v") {
+        0 => Verbosity::Info,
+        1 | _ => Verbosity::Debug,
+    };
 
     // You can handle information about subcommands by requesting their matches by name
     // (as below), requesting just the name used, or both at the same time
@@ -125,7 +121,7 @@ fn main() {
             Some(password) => Box::new(EncryptedDmgReader::from_reader(input, password).unwrap()),
         };
         let buf_reader = &mut BufReader::new(input_real);
-        let mut wiz = match DmgWiz::from_reader(buf_reader) {
+        let mut wiz = match DmgWiz::from_reader(buf_reader, verbosity) {
             Err(err) => panic!("Error while reading dmg: {}", err),
             Ok(val) => val,
         };

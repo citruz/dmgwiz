@@ -218,6 +218,7 @@ macro_rules! printDebug {
 pub struct DmgWiz<R> {
     input: R,
     partitions: Vec<Partition>,
+    data_offset: u64,
     pub verbosity: Verbosity,
 }
 
@@ -237,7 +238,7 @@ where
             _ => err,
         }
     }
-    pub fn from_reader(mut input: R) -> Result<DmgWiz<R>> {
+    pub fn from_reader(mut input: R, verbosity: Verbosity) -> Result<DmgWiz<R>> {
         // seek to end of file to read koly header
         input.seek(SeekFrom::End(-0x200))?;
 
@@ -253,7 +254,15 @@ where
                 Error::InvalidInput("could not parse koly header".to_string()),
             ));
         }
-        //println!("{:?}", header);
+        if verbosity == Verbosity::Debug {
+            println!("{:#?}", header);
+        }
+
+        // sanity check
+        if header.data_fork_length == 0 {
+            return Err(Error::InvalidInput("data fork length is 0".to_string()));
+        }
+        let data_offset = header.data_fork_offset;
 
         // read plist
         input.seek(SeekFrom::Start(header.xml_offset))?;
@@ -296,10 +305,10 @@ where
             })
             .collect();
 
-        let verbosity = Verbosity::None;
         Ok(DmgWiz {
             input,
             partitions,
+            data_offset,
             verbosity,
         })
     }
@@ -390,7 +399,7 @@ where
             }
 
             // position input at start of chunk
-            self.input.seek(SeekFrom::Start(chunk.compressed_offset))?;
+            self.input.seek(SeekFrom::Start(self.data_offset + chunk.compressed_offset))?;
 
             let in_len = chunk.compressed_length as usize;
             let out_len = chunk.sector_count as usize * SECTOR_SIZE;

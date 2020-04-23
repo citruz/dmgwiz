@@ -1,5 +1,5 @@
 extern crate libc;
-extern crate lzfse_sys as ffi;
+extern crate lzfse_src as ffi;
 
 use libc::size_t;
 

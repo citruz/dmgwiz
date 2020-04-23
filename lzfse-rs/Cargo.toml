@@ -3,7 +3,7 @@ name = "lzfse"
 version = "0.0.1"
 
 [dependencies]
-lzfse-sys = { version = "0.0.1", path = "lzfse-sys" }
+lzfse-src = { version = "0.0.1", path = "lzfse-src" }
 libc = "0.2"
 
 [dev-dependencies]

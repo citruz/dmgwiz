@@ -7,8 +7,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        #build: [stable, beta, nightly, macos, win64]
-        build: [stable, beta, nightly, macos, win32, win64, win32-gnu, win64-gnu]
+        build: [stable, beta, nightly, macos, win32, win64]
         include:
           - build: stable
             os: ubuntu-latest
@@ -28,12 +27,6 @@ jobs:
           - build: win64
             os: windows-latest
             rust: stable-x86_64-msvc
-          - build: win32-gnu
-            os: windows-latest
-            rust: stable-i686-gnu
-          - build: win64-gnu
-            os: windows-latest
-            rust: stable-x86_64-gnu
     steps:
     - uses: actions/checkout@master
       with:

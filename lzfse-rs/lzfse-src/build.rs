@@ -9,18 +9,18 @@ fn main() {
 
     let dst = PathBuf::from(env::var_os("OUT_DIR").unwrap());
 
-    cfg.include("lzfse-1.0/src")
-        .file("lzfse-1.0/src/lzfse_encode.c")
-        .file("lzfse-1.0/src/lzfse_decode.c")
-        .file("lzfse-1.0/src/lzfse_encode_base.c")
-        .file("lzfse-1.0/src/lzfse_decode_base.c")
-        .file("lzfse-1.0/src/lzvn_encode_base.c")
-        .file("lzfse-1.0/src/lzvn_decode_base.c")
-        .file("lzfse-1.0/src/lzfse_fse.c")
+    cfg.include("lzfse/src")
+        .file("lzfse/src/lzfse_encode.c")
+        .file("lzfse/src/lzfse_decode.c")
+        .file("lzfse/src/lzfse_encode_base.c")
+        .file("lzfse/src/lzfse_decode_base.c")
+        .file("lzfse/src/lzvn_encode_base.c")
+        .file("lzfse/src/lzvn_decode_base.c")
+        .file("lzfse/src/lzfse_fse.c")
         .out_dir(dst.join("lib"))
         .compile("libbz2.a");
 
-    let src = env::current_dir().unwrap().join("lzfse-1.0").join("src");
+    let src = env::current_dir().unwrap().join("lzfse").join("src");
     let include = dst.join("include");
     fs::create_dir_all(&include).unwrap();
     fs::copy(src.join("lzfse.h"), include.join("lzfse.h")).unwrap();

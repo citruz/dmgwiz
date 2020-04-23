@@ -87,8 +87,6 @@ fn main() {
         1 | _ => Verbosity::Debug,
     };
 
-    // You can handle information about subcommands by requesting their matches by name
-    // (as below), requesting just the name used, or both at the same time
     if let Some(matches) = matches.subcommand_matches("decrypt") {
         let password = matches.value_of("password").unwrap();
         let out_file = matches.value_of("output").unwrap();

@@ -1,11 +1,11 @@
 [package]
-name = "lzfse-sys"
+name = "lzfse-src"
 version = "0.0.1"
 links = "lzfse"
 build = "build.rs"
 
 [lib]
-name = "lzfse_sys"
+name = "lzfse_src"
 path = "lib.rs"
 
 [dependencies]

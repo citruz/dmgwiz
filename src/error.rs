@@ -53,7 +53,7 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             Error::Encrypted => write!(f, "DMG seems to encrypted"),
-            Error::InvalidInput(ref str) => write!(f, "invalid input: {}", str),
+            Error::InvalidInput(ref str) => write!(f, "{}", str),
             Error::InvalidPartition(num_partition) => {
                 write!(f, "partition {} does not exist", num_partition)
             }
@@ -72,7 +72,7 @@ impl fmt::Display for Error {
                 partition_num, chunk_num, chunk_type
             ),
             Error::Io(ref e) => e.fmt(f),
-            Error::Parse(ref e) => e.fmt(f),
+            Error::Parse(ref e) => write!(f, "parse error ({})", e),
         }
     }
 }

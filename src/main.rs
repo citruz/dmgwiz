@@ -1,9 +1,9 @@
-use std::error::Error;
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufReader;
 use std::io::BufWriter;
 use std::path::Path;
+use std::process;
 
 use clap::{App, Arg, SubCommand};
 
@@ -11,6 +11,11 @@ use dmgwiz::{DmgWiz, EncryptedDmgReader, Verbosity};
 
 trait ReadNSeek: Read + Seek {}
 impl<T: Read + Seek> ReadNSeek for T {}
+
+fn error(msg: String) -> ! {
+    eprintln!("error: {}", msg);
+    process::exit(1);
+}
 
 fn main() {
     let matches = App::new("dmgwiz")
@@ -74,13 +79,13 @@ fn main() {
         )
         .get_matches();
 
+    // open input file
     let in_file = matches.value_of("INPUT").unwrap();
     let in_path = Path::new(in_file);
     let input = match File::open(&in_path) {
-        Err(why) => panic!("couldn't open {}: {}", in_path.display(), why.description()),
+        Err(why) => error(format!("could not open input file - {}", why)),
         Ok(file) => file,
     };
-    println!("Using input file: {}", in_file);
 
     let verbosity = match matches.occurrences_of("v") {
         0 => Verbosity::Info,
@@ -91,67 +96,101 @@ fn main() {
         let password = matches.value_of("password").unwrap();
         let out_file = matches.value_of("output").unwrap();
 
-        println!("Decrypting {:?} using password {:?}", in_file, password);
-
-        let out_path = Path::new(out_file);
-        let output = match File::create(&out_path) {
-            Err(why) => panic!(
-                "couldn't open {}: {}",
-                out_path.display(),
-                why.description()
-            ),
-            Ok(file) => file,
-        };
-        let buf_reader = &mut BufReader::new(input);
-        let mut reader = match EncryptedDmgReader::from_reader(buf_reader, password) {
-            Err(err) => panic!("Error while decrypting: {}", err),
-            Ok(val) => val,
-        };
-
-        let buf_writer = &mut BufWriter::new(output);
-        match reader.read_all(buf_writer) {
-            Err(err) => panic!("Error while decrypting: {}", err),
-            Ok(bytes_written) => println!("written {} bytes", bytes_written),
-        };
+        decrypt(verbosity, input, out_file, password);
     } else {
+        // if a password is supplied, use it do create an EncryptedDmgReader
         let input_real: Box<dyn ReadNSeek> = match matches.value_of("password") {
             None => Box::new(input),
-            Some(password) => Box::new(EncryptedDmgReader::from_reader(input, password).unwrap()),
+            Some(password) => match EncryptedDmgReader::from_reader(input, password, verbosity) {
+                Ok(reader) => Box::new(reader),
+                Err(err) => error(format!("{}", err)),
+            },
         };
+        // read dmg
         let buf_reader = &mut BufReader::new(input_real);
         let mut wiz = match DmgWiz::from_reader(buf_reader, verbosity) {
-            Err(err) => panic!("Error while reading dmg: {}", err),
+            Err(err) => match err {
+                dmgwiz::Error::Encrypted => error(
+                    "dmg is encrypted, please use the -p option and provide a password".to_string(),
+                ),
+                _ => error(format!("could not read input file - {}", err)),
+            },
             Ok(val) => val,
         };
         if let Some(_) = matches.subcommand_matches("info") {
-            wiz.info();
+            info(wiz, verbosity);
         } else if let Some(matches) = matches.subcommand_matches("extract") {
             let out_file = matches.value_of("output").unwrap();
-            let out_path = Path::new(out_file);
-            let output = match File::create(&out_path) {
-                Err(why) => panic!(
-                    "couldn't open {}: {}",
-                    out_path.display(),
-                    why.description()
-                ),
-                Ok(file) => file,
-            };
-            let buf_writer = &mut BufWriter::new(output);
-
-            let res;
-            if let Some(partition_str) = matches.value_of("partition") {
-                let partition_num: usize = match partition_str.parse() {
-                    Ok(val) => val,
-                    Err(_) => panic!(format!("invalid partition number: {}", partition_str)),
-                };
-                res = wiz.extract_partition(buf_writer, partition_num)
-            } else {
-                res = wiz.extract_all(buf_writer);
-            }
-
-            if let Err(err) = res {
-                panic!("Error while extracting: {}", err);
-            }
+            extract(&mut wiz, out_file, matches.value_of("partition"));
         }
+    }
+}
+
+fn decrypt(verbosity: Verbosity, input: File, out_file: &str, password: &str) {
+    // open output file
+    let out_path = Path::new(out_file);
+    let output = match File::create(&out_path) {
+        Err(why) => error(format!("could not open output file - {}", why)),
+        Ok(file) => file,
+    };
+
+    // read input file
+    let buf_reader = &mut BufReader::new(input);
+    let mut reader = match EncryptedDmgReader::from_reader(buf_reader, password, verbosity) {
+        Err(err) => match err {
+            dmgwiz::Error::Parse(ref _e) => error(format!(
+                "could not parse input file - are you sure it is encrypted?"
+            )),
+            dmgwiz::Error::InvalidPassword => error(format!("invalid password")),
+            _ => error(format!("could not read encrypted dmg - {}", err)),
+        },
+        Ok(val) => val,
+    };
+
+    // write output file
+    let buf_writer = &mut BufWriter::new(output);
+    match reader.read_all(buf_writer) {
+        Err(err) => error(format!("could not read encrypted dmg - {}", err)),
+        Ok(bytes_written) => println!("{} bytes written", bytes_written),
+    };
+}
+
+fn info(wiz: DmgWiz<&mut BufReader<Box<dyn ReadNSeek>>>, verbosity: Verbosity) {
+    for (i, partition) in wiz.partitions.iter().enumerate() {
+        if verbosity == Verbosity::Debug {
+            println!("{}", partition);
+        } else {
+            println!("partition {}: {}", i, partition.name);
+        }
+    }
+}
+
+fn extract(
+    wiz: &mut DmgWiz<&mut BufReader<Box<dyn ReadNSeek>>>,
+    out_file: &str,
+    partition: Option<&str>,
+) {
+    // open output file
+    let out_path = Path::new(out_file);
+    let output = match File::create(&out_path) {
+        Err(why) => error(format!("could not open ouput file - {}", why)),
+        Ok(file) => file,
+    };
+    let buf_writer = &mut BufWriter::new(output);
+
+    // extract partition(s)
+    let result = match partition {
+        Some(partition_str) => {
+            let partition_num = match partition_str.parse() {
+                Ok(val) => val,
+                Err(_) => error(format!("invalid partition number")),
+            };
+            wiz.extract_partition(buf_writer, partition_num)
+        }
+        None => wiz.extract_all(buf_writer),
+    };
+
+    if let Err(err) = result {
+        error(format!("Error while extracting: {}", err));
     }
 }

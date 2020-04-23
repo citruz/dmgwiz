@@ -14,7 +14,16 @@ use serde::{Deserialize, Serialize};
 
 static PBKDF2_ALG: pbkdf2::Algorithm = pbkdf2::PBKDF2_HMAC_SHA1;
 
-use super::{Error, Result};
+use super::{Error, Result, Verbosity};
+
+// how can i use macro from super?
+macro_rules! printDebug {
+    ($self:ident, $($arg:tt)*) => ({
+        if $self.verbosity == Verbosity::Debug {
+            println!($($arg)*);
+        }
+    })
+}
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct EncryptedDmgHeader {
@@ -62,19 +71,27 @@ pub struct EncryptedDmgReader<R> {
     chunk_size: usize,
     data_size: usize,
     cur_pos: usize,
+    pub verbosity: Verbosity,
 }
 
 impl<R> EncryptedDmgReader<R>
 where
     R: Read + Seek,
 {
-    pub fn from_reader(mut reader: R, password: &str) -> Result<EncryptedDmgReader<R>> {
+    pub fn from_reader(
+        mut reader: R,
+        password: &str,
+        verbosity: Verbosity,
+    ) -> Result<EncryptedDmgReader<R>> {
         let header: EncryptedDmgHeader = bincode_config()
             .big_endian()
             .deserialize_from(&mut reader)
             .map_err(|err| Error::Parse(err))?;
 
-        //TODO println!("{:?}", header);
+        if verbosity == Verbosity::Debug {
+            println!("header: {:#?}", header);
+        }
+
         if header.get_signature() != "encrcdsa" {
             return Err(Error::InvalidInput("could not parse header".to_string()));
         }
@@ -107,8 +124,10 @@ where
         let aes_key = &keyblob[..aes_key_size];
         let hmacsha1_key = &keyblob[aes_key_size..aes_key_size + hmac_key_size];
 
-        println!("aes_key: {:x?}", aes_key);
-        println!("hmacsha1_key: {:x?}", hmacsha1_key);
+        if verbosity == Verbosity::Debug {
+            println!("aes_key: {:x?}", aes_key);
+            println!("hmacsha1_key: {:x?}", hmacsha1_key);
+        }
 
         let cipher = match header.data_enc_key_bits {
             128 => Cipher::aes_128_cbc(),
@@ -130,6 +149,7 @@ where
             chunk_size: header.blocksize as usize,
             header: header,
             cur_pos: 0,
+            verbosity: verbosity,
         })
     }
 
@@ -238,7 +258,13 @@ where
 
 impl<R: Read + Seek> std::io::Read for EncryptedDmgReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        //println!("EncryptedDmgReader: got read with len={} cur_pos={} data_size={}", buf.len(), self.cur_pos, self.data_size);
+        printDebug!(
+            self,
+            "EncryptedDmgReader: got read with len={} cur_pos={} data_size={}",
+            buf.len(),
+            self.cur_pos,
+            self.data_size
+        );
 
         if self.cur_pos >= self.data_size || buf.len() == 0 {
             // EOF
@@ -262,7 +288,13 @@ impl<R: Read + Seek> std::io::Read for EncryptedDmgReader<R> {
         };
 
         while bytes_to_read > 0 {
-            //println!("chunk_no={} chunk_offset={} bytes_to_read={}", chunk_no, chunk_offset, bytes_to_read);
+            printDebug!(
+                self,
+                "chunk_no={} chunk_offset={} bytes_to_read={}",
+                chunk_no,
+                chunk_offset,
+                bytes_to_read
+            );
 
             if self.reader.read(&mut buffer)? == 0 {
                 // reached eof of underlying reader
@@ -281,7 +313,7 @@ impl<R: Read + Seek> std::io::Read for EncryptedDmgReader<R> {
             if chunk_offset + bytes_to_read < self.chunk_size {
                 data.truncate(chunk_offset + bytes_to_read);
             }
-            //bytes_written+data.len()-chunk_offset
+
             let new_bytes = data.len() - chunk_offset;
             buf[bytes_written..bytes_written + new_bytes].copy_from_slice(&data[chunk_offset..]);
             bytes_to_read -= new_bytes;
@@ -311,7 +343,7 @@ impl<R> std::io::Seek for EncryptedDmgReader<R> {
             ))
         } else {
             // according to docs seeking beyond the end should not be an error hence we allow it
-            //println!("EncryptedDmgReader: seeking to {}", new_pos);
+            printDebug!(self, "EncryptedDmgReader: seeking to {}", new_pos);
             self.cur_pos = new_pos as usize;
             Ok(self.cur_pos as u64)
         }

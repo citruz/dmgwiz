@@ -56,8 +56,8 @@ impl KolyHeader {
 }
 
 #[derive(Debug)]
-struct Partition {
-    name: String,
+pub struct Partition {
+    pub name: String,
     id: i64,
     attributes: String,
     blkx_table: BLKXTable,
@@ -192,7 +192,7 @@ impl fmt::Display for BLKXTable {
     }
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Copy, Clone)]
 pub enum Verbosity {
     None,
     Info,
@@ -217,7 +217,7 @@ macro_rules! printDebug {
 
 pub struct DmgWiz<R> {
     input: R,
-    partitions: Vec<Partition>,
+    pub partitions: Vec<Partition>,
     data_offset: u64,
     pub verbosity: Verbosity,
 }
@@ -311,12 +311,6 @@ where
             data_offset,
             verbosity,
         })
-    }
-
-    pub fn info(&self) {
-        for (i, partition) in self.partitions.iter().enumerate() {
-            println!("partition {}: {}", i, partition.name);
-        }
     }
 
     pub fn extract_all<W>(&mut self, mut output: W) -> Result<usize>

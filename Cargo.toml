@@ -5,16 +5,16 @@ authors = ["Felix Seele <fseele@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-itertools = "0.8.1"
+itertools = "0.9.0"
 clap = "2.33.0"
-bincode = "1.2.0"
+bincode = "1.2.1"
 serde = { version = "1.0", features = ["derive"] }
-ring = "0.16.9"
+ring = "0.16.12"
 openssl = { version = "0.10", features = ["vendored"] }
 plist = "0.5"
 num-traits = "0.2"
 num-derive = "0.3"
-flate2 = "1.0.12"
+flate2 = "1.0.14"
 bzip2 = "0.3.3"
 lzfse = { version = "0.0.1", path = "lzfse-rs" }
 adc = { version = "0.0.1", path = "adc-rs" }

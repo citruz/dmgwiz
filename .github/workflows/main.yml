@@ -7,8 +7,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        build: [stable, beta, nightly, macos, win64]
-        #build: [stable, beta, nightly, macos, win32, win64, win32-gnu, win64-gnu]
+        #build: [stable, beta, nightly, macos, win64]
+        build: [stable, beta, nightly, macos, win32, win64, win32-gnu, win64-gnu]
         include:
           - build: stable
             os: ubuntu-latest
@@ -22,41 +22,34 @@ jobs:
           - build: macos
             os: macos-latest
             rust: stable
-          #- build: win32
-          #  os: windows-latest
-          #  rust: stable-i686-msvc
+          - build: win32
+            os: windows-latest
+            rust: stable-i686-msvc
           - build: win64
             os: windows-latest
             rust: stable-x86_64-msvc
-          #- build: win32-gnu
-          #  os: windows-latest
-          #  rust: stable-i686-gnu
-          #- build: win64-gnu
-          #  os: windows-latest
-          #  rust: stable-x86_64-gnu
+          - build: win32-gnu
+            os: windows-latest
+            rust: stable-i686-gnu
+          - build: win64-gnu
+            os: windows-latest
+            rust: stable-x86_64-gnu
     steps:
     - uses: actions/checkout@master
       with:
         submodules: true
     - name: Install Rust (rustup)
       run: rustup update ${{ matrix.rust }} --no-self-update && rustup default ${{ matrix.rust }}
-      if: matrix.os != 'macos-latest'
       shell: bash
-    - name: Install Rust (macos)
-      run: |
-        curl https://sh.rustup.rs | sh -s -- -y
-        echo "##[add-path]$HOME/.cargo/bin"
-      if: matrix.os == 'macos-latest'
-    - name: Install Perl (Windows)
-      run: |
-        choco install activeperl
-        echo "##[add-path]C:\Perl64\bin"
-      if: matrix.build == 'win64'
+    - name: Use strawberry perl
+      if: startsWith(matrix.os, 'windows')
+      run: echo ::set-env name=OPENSSL_SRC_PERL::C:/Strawberry/perl/bin/perl
+      shell: bash
     - name: Test Perl (Windows)
       run: |
         Get-Command perl
         perl -v
-      if: matrix.os == 'windows-latest'
+      if: startsWith(matrix.os, 'windows')
     - name: Run Cargo Test (ADC)
       run: cargo test
       working-directory: ./adc-rs

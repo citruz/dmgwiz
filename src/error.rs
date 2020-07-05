@@ -5,6 +5,7 @@ use super::ChunkType;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// This type represents all possible errors that can occur when working with DMGs.
 #[derive(Debug)]
 pub enum Error {
     /// The was an IO error while reading or writing.
@@ -32,14 +33,6 @@ pub enum Error {
 }
 
 impl std::error::Error for Error {
-    fn description(&self) -> &str {
-        match *self {
-            Error::Io(ref err) => std::error::Error::description(err),
-            // TODO
-            _ => "",
-        }
-    }
-
     fn cause(&self) -> Option<&dyn std::error::Error> {
         match *self {
             Error::Io(ref err) => Some(err),

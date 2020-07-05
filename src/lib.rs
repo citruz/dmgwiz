@@ -1,5 +1,5 @@
 use adc::AdcDecoder;
-use bincode::config as bincode_config;
+use bincode::Options;
 use bzip2::read::BzDecoder;
 use flate2::read::ZlibDecoder;
 use itertools::Itertools;
@@ -22,14 +22,20 @@ pub use error::{Error, Result};
 
 const SECTOR_SIZE: usize = 512;
 
+/// Structure representing the "koly" header (actually it is a trailer)
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 struct KolyHeader {
+    /// "koly"
     signature: [char; 4],
+    /// we only support 4 which is the current one
     version: u32,
+    /// size of this header, always 512
     header_size: u32,
     flags: u32,
     running_data_fork_offset: u64,
+    /// file offset where the data starts
     data_fork_offset: u64,
+    /// size of data
     data_fork_length: u64,
     rsrc_fork_offset: u64,
     rsrc_fork_length: u64,
@@ -39,6 +45,7 @@ struct KolyHeader {
     data_fork_checksum_type: u32,
     data_fork_checksum_size: u32,
     data_fork_checksum: [u32; 32],
+    /// file offset where the plist starts
     xml_offset: u64,
     xml_length: u64,
     reserved4: [u64; 15],
@@ -46,6 +53,7 @@ struct KolyHeader {
     master_checksum_size: u32,
     master_checksum: [u32; 32],
     image_variant: u32,
+    /// total number of sectors
     sector_count: u64,
 }
 
@@ -55,6 +63,9 @@ impl KolyHeader {
     }
 }
 
+/// Structure representing a partition of the DMG
+///
+/// Attributes are extracted from the plist.
 #[derive(Debug)]
 pub struct Partition {
     pub name: String,
@@ -84,6 +95,7 @@ struct UDIFChecksum {
     data: [u32; 0x20],
 }
 
+/// Possible compression types of the BLXChunk
 #[repr(u32)]
 #[derive(FromPrimitive, Debug, PartialEq)]
 pub enum ChunkType {
@@ -99,13 +111,20 @@ pub enum ChunkType {
     Term = 0xffffffff,
 }
 
+/// each chunk describes a number of consecutive sectors
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 struct BLKXChunk {
+    /// compression type used for this chunk
     r#type: u32,
+    /// ascii, only set if type is Comment
     comment: u32,
+    /// start sector
     sector_number: u64,
+    /// number of sectors represented by this chunk
     sector_count: u64,
+    /// offset of the compressed data
     compressed_offset: u64,
+    /// length of compressed data
     compressed_length: u64,
 }
 
@@ -134,26 +153,35 @@ impl fmt::Display for BLKXChunk {
     }
 }
 
+/// header of the BLXTable
 #[derive(Debug)]
 struct BLKXTable {
+    /// "mish"
     signature: [char; 4],
+    /// currently 1
     version: u32,
+    /// starting sector
     sector_number: u64,
+    /// number of sectors
     sector_count: u64,
+    /// seems to be always 0
     data_offset: u64,
     buffers_needed: u32,
     block_descriptors: u32,
     reserved: [u32; 6],
+    /// checksum
     checksum: UDIFChecksum,
+    /// number of chunks in the following table
     num_chunks: u32,
+    /// chunks
     chunks: Vec<BLKXChunk>,
 }
 
 impl std::convert::From<Vec<u8>> for BLKXTable {
+    /// parse a BLKXTable struct from binary input
     fn from(data: Vec<u8>) -> Self {
         let mut c = Cursor::new(data);
-        let mut decoder = bincode::config();
-        decoder.big_endian();
+        let decoder = bincode::DefaultOptions::new().with_big_endian();
         let mut table = BLKXTable {
             signature: decoder.deserialize_from(&mut c).unwrap(),
             version: decoder.deserialize_from(&mut c).unwrap(),
@@ -192,6 +220,7 @@ impl fmt::Display for BLKXTable {
     }
 }
 
+/// Defines how much information should be printed
 #[derive(PartialEq, Debug, Copy, Clone)]
 pub enum Verbosity {
     None,
@@ -215,8 +244,16 @@ macro_rules! printDebug {
     })
 }
 
+/// Main type representing a DMG
+///
+/// Use the `from_reader` method to parse a DMG from any input stream. Afterwards, partition
+/// information will be available through the `partitions` attribute. Either `extract_all` or
+/// `extract` can be used to retrieve partition data from the image.
+///
+/// See `main.rs` for a real-world example.
 pub struct DmgWiz<R> {
     input: R,
+    /// Array of partitions
     pub partitions: Vec<Partition>,
     data_offset: u64,
     pub verbosity: Verbosity,
@@ -226,24 +263,34 @@ impl<R> DmgWiz<R>
 where
     R: Read + Seek,
 {
-    fn check_encrypted_or(mut input: R, err: Error) -> Error {
-        if let Err(err) = input.seek(SeekFrom::Start(0)) {
-            return err.into();
-        }
-        match bincode_config()
-            .big_endian()
-            .deserialize_from::<&mut R, EncryptedDmgHeader>(&mut input)
-        {
-            Ok(ref hdr) if hdr.get_signature() == "encrcdsa" => Error::Encrypted,
-            _ => err,
-        }
-    }
+    /// Create a `DmgWiz` instance from a seekable byte stream
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - A seekable reader
+    /// * `verbosity` - Verbosity for debugging
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use std::fs::File;
+    /// use dmgwiz::{DmgWiz, Verbosity};
+    ///
+    /// let input = File::open("tests/input.dmg").unwrap();
+    /// let mut wiz = match DmgWiz::from_reader(input, Verbosity::None) {
+    ///     Err(err) => panic!(format!("could not read input file - {}", err)),
+    ///     Ok(val) => val,
+    /// };
+    /// ```
     pub fn from_reader(mut input: R, verbosity: Verbosity) -> Result<DmgWiz<R>> {
         // seek to end of file to read koly header
         input.seek(SeekFrom::End(-0x200))?;
 
         // try to read header
-        let header: KolyHeader = match bincode_config().big_endian().deserialize_from(&mut input) {
+        let header: KolyHeader = match bincode::DefaultOptions::new()
+            .with_big_endian()
+            .deserialize_from(&mut input)
+        {
             Err(err) => return Err(DmgWiz::check_encrypted_or(input, err.into())),
             Ok(val) => val,
         };
@@ -299,7 +346,7 @@ where
                     .to_vec()
                     .into(),
                 id: part
-                    .and_then(|p| p.get("Name"))
+                    .and_then(|p| p.get("ID"))
                     .and_then(|n| n.as_signed_integer())
                     .unwrap_or_default(),
             })
@@ -313,6 +360,26 @@ where
         })
     }
 
+    /// Decompress all partitions and write to output
+    ///
+    /// # Arguments
+    ///
+    /// * `output` - A seekable writer
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use std::fs::File;
+    /// use dmgwiz::{DmgWiz, Verbosity};
+    ///
+    /// let input = File::open("tests/input.dmg").unwrap();
+    /// let output = File::create("tests/output.bin").unwrap();
+    /// let mut wiz = DmgWiz::from_reader(input, Verbosity::None).unwrap();
+    /// match wiz.extract_all(output) {
+    ///     Err(err) => panic!(format!("error while extracting: {}", err)),
+    ///     Ok(bytes) => println!("done. {} bytes written", bytes),
+    /// }
+    /// ```
     pub fn extract_all<W>(&mut self, mut output: W) -> Result<usize>
     where
         W: Write + Seek,
@@ -325,6 +392,30 @@ where
         Ok(bytes_written)
     }
 
+    /// Decompress a specific partition and write to output
+    ///
+    /// Partition information can be retrieved using the `partitions` attribute of `DmzWiz`.
+    /// Returns the number of written bytes.
+    ///
+    /// # Arguments
+    ///
+    /// * `output` - A writer
+    /// * `partition_num` - Index of the partition
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use std::fs::File;
+    /// use dmgwiz::{DmgWiz, Verbosity};
+    ///
+    /// let input = File::open("tests/input.dmg").unwrap();
+    /// let output = File::create("tests/output.bin").unwrap();
+    /// let mut wiz = DmgWiz::from_reader(input, Verbosity::None).unwrap();
+    /// match wiz.extract_partition(output, 0) {
+    ///     Err(err) => panic!(format!("error while extracting: {}", err)),
+    ///     Ok(bytes) => println!("done. {} bytes written", bytes),
+    /// }
+    /// ```
     pub fn extract_partition<W>(&mut self, mut output: W, partition_num: usize) -> Result<usize>
     where
         W: Write,
@@ -447,6 +538,19 @@ where
         }
 
         Ok(sectors_written as usize * SECTOR_SIZE)
+    }
+
+    fn check_encrypted_or(mut input: R, err: Error) -> Error {
+        if let Err(err) = input.seek(SeekFrom::Start(0)) {
+            return err.into();
+        }
+        match bincode::DefaultOptions::new()
+            .with_big_endian()
+            .deserialize_from::<&mut R, EncryptedDmgHeader>(&mut input)
+        {
+            Ok(ref hdr) if hdr.get_signature() == "encrcdsa" => Error::Encrypted,
+            _ => err,
+        }
     }
 }
 

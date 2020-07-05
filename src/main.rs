@@ -21,18 +21,19 @@ fn main() {
     let matches = App::new("dmgwiz")
         .version("0.1")
         .author("Felix Seele <fseele@gmail.com>")
-        .about("Tool to work with DMG images")
+        .about("Extract filesystem data from DMG files")
         .arg(
             Arg::with_name("INPUT")
                 .help("Sets the input file to use")
                 .required(true)
                 .index(1),
         )
+        .arg(Arg::with_name("quiet").short("q").help("Only print errors"))
         .arg(
             Arg::with_name("v")
                 .short("v")
                 .multiple(true)
-                .help("Sets the level of verbosity"),
+                .help("Sets the level of verbosity (multiple allowed)"),
         )
         .arg(
             Arg::with_name("password")
@@ -40,10 +41,10 @@ fn main() {
                 .takes_value(true)
                 .help("Password for encrypted DMGs"),
         )
-        .subcommand(SubCommand::with_name("info").about("show dmg properties"))
+        .subcommand(SubCommand::with_name("info").about("Print DMG partitions"))
         .subcommand(
             SubCommand::with_name("extract")
-                .about("single or all partitions")
+                .about("Extract single or all partitions")
                 .arg(
                     Arg::with_name("partition")
                         .takes_value(true)
@@ -56,25 +57,25 @@ fn main() {
                         .takes_value(true)
                         .short("o")
                         .required(true)
-                        .help("output file"),
+                        .help("Output file"),
                 ),
         )
         .subcommand(
             SubCommand::with_name("decrypt")
-                .about("decrpyt dmg")
+                .about("Decrypt DMG")
                 .arg(
                     Arg::with_name("password")
                         .takes_value(true)
                         .short("p")
                         .required(true)
-                        .help("password"),
+                        .help("Password to decrypt DMG"),
                 )
                 .arg(
                     Arg::with_name("output")
                         .takes_value(true)
                         .short("o")
                         .required(true)
-                        .help("file to write into"),
+                        .help("Path to write output"),
                 ),
         )
         .get_matches();
@@ -87,9 +88,12 @@ fn main() {
         Ok(file) => file,
     };
 
-    let verbosity = match matches.occurrences_of("v") {
-        0 => Verbosity::Info,
-        1 | _ => Verbosity::Debug,
+    let verbosity = match matches.is_present("quiet") {
+        true => Verbosity::None,
+        false => match matches.occurrences_of("v") {
+            0 => Verbosity::Info,
+            1 | _ => Verbosity::Debug,
+        },
     };
 
     if let Some(matches) = matches.subcommand_matches("decrypt") {

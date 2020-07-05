@@ -2,6 +2,8 @@ extern crate bincode;
 
 use std::io::prelude::*;
 
+use bincode::Options;
+
 #[derive(PartialEq, Debug)]
 pub enum AdcChunkType {
     Plain,
@@ -72,8 +74,8 @@ impl<R: Read> AdcDecoder<R> {
                 offset: (((byte as usize) & 0x3) << 8) + byte2 as usize,
             }));
         } else {
-            let offset: u16 = match bincode::config()
-                .big_endian()
+            let offset: u16 = match bincode::DefaultOptions::new()
+                .with_big_endian()
                 .deserialize_from(&mut self.input)
             {
                 Err(err) => return Err(AdcError::Io(format!("{}", err))),

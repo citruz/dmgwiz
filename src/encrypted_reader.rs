@@ -4,7 +4,7 @@ use std::io::prelude::*;
 use std::io::SeekFrom;
 use std::num::NonZeroU32;
 
-use bincode::config as bincode_config;
+use bincode::Options;
 use openssl::hash::MessageDigest;
 use openssl::pkey::PKey;
 use openssl::sign::Signer;
@@ -25,6 +25,7 @@ macro_rules! printDebug {
     })
 }
 
+/// Header used for encrypted DMGs
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct EncryptedDmgHeader {
     signature: [char; 8],
@@ -62,6 +63,12 @@ impl EncryptedDmgHeader {
     }
 }
 
+/// Reader to read from encrypted DMGs
+///
+/// Use this to transparently read from encrypted DMGs.
+/// Support AES-128 and AES-256 encryption.
+///
+/// See `main.rs` for a real-world example.
 pub struct EncryptedDmgReader<R> {
     header: EncryptedDmgHeader,
     aes_key: Vec<u8>,
@@ -78,13 +85,33 @@ impl<R> EncryptedDmgReader<R>
 where
     R: Read + Seek,
 {
+    /// Create a `EncryptedDmgReader` instance from a seekable byte stream
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - A seekable reader
+    /// * `password` - Password for decryption
+    /// * `verbosity` - Verbosity for debugging
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use std::fs::File;
+    /// use dmgwiz::{EncryptedDmgReader, Verbosity};
+    ///
+    /// let input = File::open("tests/input_aes256.dmg").unwrap();
+    /// let mut reader = match EncryptedDmgReader::from_reader(input, "test123", Verbosity::None) {
+    ///     Err(err) => panic!(format!("could not read input file - {}", err)),
+    ///     Ok(val) => val,
+    /// };
+    /// ```
     pub fn from_reader(
         mut reader: R,
         password: &str,
         verbosity: Verbosity,
     ) -> Result<EncryptedDmgReader<R>> {
-        let header: EncryptedDmgHeader = bincode_config()
-            .big_endian()
+        let header: EncryptedDmgHeader = bincode::DefaultOptions::new()
+            .with_big_endian()
             .deserialize_from(&mut reader)
             .map_err(|err| Error::Parse(err))?;
 
@@ -153,6 +180,26 @@ where
         })
     }
 
+    /// Decrypt all data and write to output
+    ///
+    /// # Arguments
+    ///
+    /// * `output` - A seekable writer
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use std::fs::File;
+    /// use dmgwiz::{EncryptedDmgReader, Verbosity};
+    ///
+    /// let input = File::open("tests/input_aes256.dmg").unwrap();
+    /// let output = File::create("tests/output.dmg").unwrap();
+    /// let mut reader = EncryptedDmgReader::from_reader(input, "test123", Verbosity::None).unwrap();
+    /// match reader.read_all(output) {
+    ///     Err(err) => panic!(format!("error while decrypting: {}", err)),
+    ///     Ok(bytes) => println!("done. {} bytes written", bytes),
+    /// }
+    /// ```
     pub fn read_all<W>(&mut self, mut output: W) -> Result<usize>
     where
         W: Write,
@@ -245,7 +292,7 @@ where
     fn compute_iv(&self, chunk_no: u32) -> Result<Vec<u8>> {
         let key = PKey::hmac(&self.hmacsha1_key)?;
         let mut signer = Signer::new(MessageDigest::sha1(), &key)?;
-        signer.update(&bincode_config().big_endian().serialize(&chunk_no).unwrap())?;
+        signer.update(&bincode::DefaultOptions::new().with_big_endian().serialize(&chunk_no).unwrap())?;
 
         match signer.sign_to_vec() {
             Err(err) => Err(err.into()),

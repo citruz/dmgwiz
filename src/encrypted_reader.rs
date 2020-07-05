@@ -112,6 +112,7 @@ where
     ) -> Result<EncryptedDmgReader<R>> {
         let header: EncryptedDmgHeader = bincode::DefaultOptions::new()
             .with_big_endian()
+            .with_fixint_encoding()
             .deserialize_from(&mut reader)
             .map_err(|err| Error::Parse(err))?;
 
@@ -292,7 +293,13 @@ where
     fn compute_iv(&self, chunk_no: u32) -> Result<Vec<u8>> {
         let key = PKey::hmac(&self.hmacsha1_key)?;
         let mut signer = Signer::new(MessageDigest::sha1(), &key)?;
-        signer.update(&bincode::DefaultOptions::new().with_big_endian().serialize(&chunk_no).unwrap())?;
+        signer.update(
+            &bincode::DefaultOptions::new()
+                .with_big_endian()
+                .with_fixint_encoding()
+                .serialize(&chunk_no)
+                .unwrap(),
+        )?;
 
         match signer.sign_to_vec() {
             Err(err) => Err(err.into()),

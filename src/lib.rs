@@ -183,20 +183,20 @@ impl std::convert::From<Vec<u8>> for BLKXTable {
         let mut c = Cursor::new(data);
         let decoder = bincode::DefaultOptions::new().with_big_endian();
         let mut table = BLKXTable {
-            signature: decoder.deserialize_from(&mut c).unwrap(),
-            version: decoder.deserialize_from(&mut c).unwrap(),
-            sector_number: decoder.deserialize_from(&mut c).unwrap(),
-            sector_count: decoder.deserialize_from(&mut c).unwrap(),
-            data_offset: decoder.deserialize_from(&mut c).unwrap(),
-            buffers_needed: decoder.deserialize_from(&mut c).unwrap(),
-            block_descriptors: decoder.deserialize_from(&mut c).unwrap(),
-            reserved: decoder.deserialize_from(&mut c).unwrap(),
-            checksum: decoder.deserialize_from(&mut c).unwrap(),
-            num_chunks: decoder.deserialize_from(&mut c).unwrap(),
+            signature: decoder.with_fixint_encoding().deserialize_from(&mut c).unwrap(),
+            version: decoder.with_fixint_encoding().deserialize_from(&mut c).unwrap(),
+            sector_number: decoder.with_fixint_encoding().deserialize_from(&mut c).unwrap(),
+            sector_count: decoder.with_fixint_encoding().deserialize_from(&mut c).unwrap(),
+            data_offset: decoder.with_fixint_encoding().deserialize_from(&mut c).unwrap(),
+            buffers_needed: decoder.with_fixint_encoding().deserialize_from(&mut c).unwrap(),
+            block_descriptors: decoder.with_fixint_encoding().deserialize_from(&mut c).unwrap(),
+            reserved: decoder.with_fixint_encoding().deserialize_from(&mut c).unwrap(),
+            checksum: decoder.with_fixint_encoding().deserialize_from(&mut c).unwrap(),
+            num_chunks: decoder.with_fixint_encoding().deserialize_from(&mut c).unwrap(),
             chunks: vec![],
         };
         let chunks: Vec<BLKXChunk> = (0..table.num_chunks)
-            .map(|_| decoder.deserialize_from(&mut c).unwrap())
+            .map(|_| decoder.with_fixint_encoding().deserialize_from(&mut c).unwrap())
             .collect();
         table.chunks = chunks;
         table
@@ -289,6 +289,7 @@ where
         // try to read header
         let header: KolyHeader = match bincode::DefaultOptions::new()
             .with_big_endian()
+            .with_fixint_encoding()
             .deserialize_from(&mut input)
         {
             Err(err) => return Err(DmgWiz::check_encrypted_or(input, err.into())),
@@ -546,6 +547,7 @@ where
         }
         match bincode::DefaultOptions::new()
             .with_big_endian()
+            .with_fixint_encoding()
             .deserialize_from::<&mut R, EncryptedDmgHeader>(&mut input)
         {
             Ok(ref hdr) if hdr.get_signature() == "encrcdsa" => Error::Encrypted,

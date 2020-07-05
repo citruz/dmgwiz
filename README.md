@@ -1,14 +1,14 @@
-dmgwiz
+DmgWiz
 ======
-dmgwiz lets you extract raw filesystem data from compressed and encrypted DMG files. It started as a [dmg2img](http://vu1tur.eu.org/tools/) clone but has more features and is more secure due to the Rust programming language.
+DmgWiz lets you extract raw filesystem data from compressed and encrypted DMG files. It started as a [dmg2img](http://vu1tur.eu.org/tools/) clone but has more features and is more secure due to the Rust programming language.
 
 - Support for adc, zlib, bzip2 and lzfse compression
 - Support for encrypted DMGs (AES-128 and AES-256)
 - Runs on Windows, Linux, macOS
 
-dmgwiz is both a CLI tool and a Rust crate so it can be integrated into other projects.
+DmgWiz is both a CLI tool and a Rust crate so it can be integrated into other projects.
 
-Usage
+CLI Usage
 -----
 
     dmgwiz [OPTIONS] <INPUT> [SUBCOMMAND]

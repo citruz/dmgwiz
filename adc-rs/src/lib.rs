@@ -76,6 +76,7 @@ impl<R: Read> AdcDecoder<R> {
         } else {
             let offset: u16 = match bincode::DefaultOptions::new()
                 .with_big_endian()
+                .with_fixint_encoding()
                 .deserialize_from(&mut self.input)
             {
                 Err(err) => return Err(AdcError::Io(format!("{}", err))),

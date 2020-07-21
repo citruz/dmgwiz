@@ -43,9 +43,6 @@ jobs:
         Get-Command perl
         perl -v
       if: startsWith(matrix.os, 'windows')
-    - name: Run Cargo Test (ADC)
-      run: cargo test
-      working-directory: ./adc-rs
     - name: Run Cargo Test (LZFSE)
       run: cargo test
       working-directory: ./lzfse-rs

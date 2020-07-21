@@ -183,20 +183,55 @@ impl std::convert::From<Vec<u8>> for BLKXTable {
         let mut c = Cursor::new(data);
         let decoder = bincode::DefaultOptions::new().with_big_endian();
         let mut table = BLKXTable {
-            signature: decoder.with_fixint_encoding().deserialize_from(&mut c).unwrap(),
-            version: decoder.with_fixint_encoding().deserialize_from(&mut c).unwrap(),
-            sector_number: decoder.with_fixint_encoding().deserialize_from(&mut c).unwrap(),
-            sector_count: decoder.with_fixint_encoding().deserialize_from(&mut c).unwrap(),
-            data_offset: decoder.with_fixint_encoding().deserialize_from(&mut c).unwrap(),
-            buffers_needed: decoder.with_fixint_encoding().deserialize_from(&mut c).unwrap(),
-            block_descriptors: decoder.with_fixint_encoding().deserialize_from(&mut c).unwrap(),
-            reserved: decoder.with_fixint_encoding().deserialize_from(&mut c).unwrap(),
-            checksum: decoder.with_fixint_encoding().deserialize_from(&mut c).unwrap(),
-            num_chunks: decoder.with_fixint_encoding().deserialize_from(&mut c).unwrap(),
+            signature: decoder
+                .with_fixint_encoding()
+                .deserialize_from(&mut c)
+                .unwrap(),
+            version: decoder
+                .with_fixint_encoding()
+                .deserialize_from(&mut c)
+                .unwrap(),
+            sector_number: decoder
+                .with_fixint_encoding()
+                .deserialize_from(&mut c)
+                .unwrap(),
+            sector_count: decoder
+                .with_fixint_encoding()
+                .deserialize_from(&mut c)
+                .unwrap(),
+            data_offset: decoder
+                .with_fixint_encoding()
+                .deserialize_from(&mut c)
+                .unwrap(),
+            buffers_needed: decoder
+                .with_fixint_encoding()
+                .deserialize_from(&mut c)
+                .unwrap(),
+            block_descriptors: decoder
+                .with_fixint_encoding()
+                .deserialize_from(&mut c)
+                .unwrap(),
+            reserved: decoder
+                .with_fixint_encoding()
+                .deserialize_from(&mut c)
+                .unwrap(),
+            checksum: decoder
+                .with_fixint_encoding()
+                .deserialize_from(&mut c)
+                .unwrap(),
+            num_chunks: decoder
+                .with_fixint_encoding()
+                .deserialize_from(&mut c)
+                .unwrap(),
             chunks: vec![],
         };
         let chunks: Vec<BLKXChunk> = (0..table.num_chunks)
-            .map(|_| decoder.with_fixint_encoding().deserialize_from(&mut c).unwrap())
+            .map(|_| {
+                decoder
+                    .with_fixint_encoding()
+                    .deserialize_from(&mut c)
+                    .unwrap()
+            })
             .collect();
         table.chunks = chunks;
         table

@@ -171,13 +171,13 @@ where
         Ok(EncryptedDmgReader {
             aes_key: aes_key.to_vec(),
             hmacsha1_key: hmacsha1_key.to_vec(),
-            reader: reader,
+            reader,
             block_cipher: cipher,
             data_size: header.datasize as usize,
             chunk_size: header.blocksize as usize,
-            header: header,
+            header,
             cur_pos: 0,
-            verbosity: verbosity,
+            verbosity,
         })
     }
 
@@ -238,9 +238,8 @@ where
                 header.kdf_salt_len)));
         }
 
-        let iterations = NonZeroU32::new(header.kdf_iteration_count).ok_or(
-            Error::UnsupportedEncryption("iterations cannot be zero".to_string()),
-        )?;
+        let iterations = NonZeroU32::new(header.kdf_iteration_count)
+            .ok_or_else(|| Error::UnsupportedEncryption("iterations cannot be zero".to_string()))?;
 
         let mut derived_key = [0u8; 24];
         pbkdf2::derive(
@@ -320,7 +319,7 @@ impl<R: Read + Seek> std::io::Read for EncryptedDmgReader<R> {
             self.data_size
         );
 
-        if self.cur_pos >= self.data_size || buf.len() == 0 {
+        if self.cur_pos >= self.data_size || buf.is_empty() {
             // EOF
             return Ok(0);
         }

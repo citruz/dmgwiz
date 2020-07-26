@@ -8,6 +8,7 @@ use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 use serde::{Deserialize, Serialize};
 use std::cmp;
+use std::cmp::Ordering;
 use std::fmt;
 use std::io::prelude::*;
 use std::io::Cursor;
@@ -358,7 +359,7 @@ where
             .and_then(|rsfk| rsfk.as_dictionary())
             .and_then(|rsfk| rsfk.get("blkx"))
             .and_then(|blkx| blkx.as_array())
-            .ok_or(Error::InvalidInput("invalid plist structure".to_string()))?;
+            .ok_or_else(|| Error::InvalidInput("invalid plist structure".to_string()))?;
 
         // convert partition dicts to Partiton objects
         let partitions: Vec<Partition> = partitions_arr
@@ -499,9 +500,9 @@ where
         let mut sectors_written = 0;
 
         for (chunk_num, chunk) in partition.blkx_table.chunks.iter().enumerate() {
-            let chunk_type = ChunkType::from_u32(chunk.r#type).ok_or(Error::InvalidInput(
-                format!("unknown chunk type {:#010x}", chunk.r#type),
-            ))?;
+            let chunk_type = ChunkType::from_u32(chunk.r#type).ok_or_else(|| {
+                Error::InvalidInput(format!("unknown chunk type {:#010x}", chunk.r#type))
+            })?;
 
             printDebug!(self,
                 "chunk {}: type={:?} comment={} sector_number={} sector_count={} compressed_offset={} compressed_length={}",
@@ -530,21 +531,24 @@ where
             self.input.read_exact(&mut inbuf[0..in_len])?;
 
             // usually sectors are consecutive, but let's check to be sure.
-            // if chunk.sector_number is less than what we have alreay written we have a problem.
+            // if chunk.sector_number is less than what we have already written we have a problem.
             // otherwise just write NULL sectors.
-            if chunk.sector_number < sectors_written {
-                return Err(Error::InvalidInput(format!(
-                    "invalid sector number: {} (partition={} chunk={})",
-                    chunk.sector_number, partition_num, chunk_num
-                )));
-            } else if chunk.sector_number > sectors_written {
-                let padding_sectors = chunk.sector_number - sectors_written;
-                let padding = vec![0; SECTOR_SIZE];
-                for _ in 0..padding_sectors {
-                    output.write_all(&padding)?;
+            match chunk.sector_number.cmp(&sectors_written) {
+                Ordering::Less => {
+                    return Err(Error::InvalidInput(format!(
+                        "invalid sector number: {} (partition={} chunk={})",
+                        chunk.sector_number, partition_num, chunk_num
+                    )))
                 }
+                Ordering::Greater => {
+                    let padding_sectors = chunk.sector_number - sectors_written;
+                    let padding = vec![0; SECTOR_SIZE];
+                    for _ in 0..padding_sectors {
+                        output.write_all(&padding)?;
+                    }
+                }
+                Ordering::Equal => (),
             }
-
             // decompress
             let bytes_read = match chunk_type {
                 ChunkType::Ignore | ChunkType::Zero => fill_zero(&mut outbuf[0..out_len]),
@@ -594,7 +598,7 @@ where
 fn decode_zlib(inbuf: &[u8], outbuf: &mut [u8]) -> Option<usize> {
     let mut z = ZlibDecoder::new(&inbuf[..]);
     match z.read_exact(outbuf) {
-        Err(_) => return None,
+        Err(_) => None,
         Ok(_) => Some(outbuf.len()),
     }
 }

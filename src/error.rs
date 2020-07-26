@@ -1,4 +1,3 @@
-use openssl;
 use std::fmt;
 
 use super::ChunkType;

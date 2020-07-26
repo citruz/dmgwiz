@@ -92,7 +92,7 @@ fn main() {
         true => Verbosity::None,
         false => match matches.occurrences_of("v") {
             0 => Verbosity::Info,
-            1 | _ => Verbosity::Debug,
+            _ => Verbosity::Debug,
         },
     };
 
@@ -121,7 +121,7 @@ fn main() {
             },
             Ok(val) => val,
         };
-        if let Some(_) = matches.subcommand_matches("info") {
+        if matches.subcommand_matches("info").is_some() {
             info(wiz, verbosity);
         } else if let Some(matches) = matches.subcommand_matches("extract") {
             let out_file = matches.value_of("output").unwrap();
@@ -142,10 +142,10 @@ fn decrypt(verbosity: Verbosity, input: File, out_file: &str, password: &str) {
     let buf_reader = &mut BufReader::new(input);
     let mut reader = match EncryptedDmgReader::from_reader(buf_reader, password, verbosity) {
         Err(err) => match err {
-            dmgwiz::Error::Parse(ref _e) => error(format!(
-                "could not parse input file - are you sure it is encrypted?"
-            )),
-            dmgwiz::Error::InvalidPassword => error(format!("invalid password")),
+            dmgwiz::Error::Parse(ref _e) => {
+                error("could not parse input file - are you sure it is encrypted?".to_string())
+            }
+            dmgwiz::Error::InvalidPassword => error("invalid password".to_string()),
             _ => error(format!("could not read encrypted dmg - {}", err)),
         },
         Ok(val) => val,
@@ -187,7 +187,7 @@ fn extract(
         Some(partition_str) => {
             let partition_num = match partition_str.parse() {
                 Ok(val) => val,
-                Err(_) => error(format!("invalid partition number")),
+                Err(_) => error(format!("invalid partition number: {}", partition_str)),
             };
             wiz.extract_partition(buf_writer, partition_num)
         }

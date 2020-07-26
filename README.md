@@ -28,7 +28,7 @@ CLI Usage
 
 **extract**
 
-    dmgwiz <INPUT> extract [-p <partition number>] -o <output>
+    dmgwiz <INPUT> extract [-n <partition number>] -o <output>
     
 
 

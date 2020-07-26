@@ -48,7 +48,7 @@ fn main() {
                 .arg(
                     Arg::with_name("partition")
                         .takes_value(true)
-                        .short("p")
+                        .short("n")
                         .required(false)
                         .help("partition number (see info command)"),
                 )
@@ -63,13 +63,6 @@ fn main() {
         .subcommand(
             SubCommand::with_name("decrypt")
                 .about("Decrypt DMG")
-                .arg(
-                    Arg::with_name("password")
-                        .takes_value(true)
-                        .short("p")
-                        .required(true)
-                        .help("Password to decrypt DMG"),
-                )
                 .arg(
                     Arg::with_name("output")
                         .takes_value(true)
@@ -96,9 +89,12 @@ fn main() {
         },
     };
 
-    if let Some(matches) = matches.subcommand_matches("decrypt") {
-        let password = matches.value_of("password").unwrap();
-        let out_file = matches.value_of("output").unwrap();
+    if let Some(decrypt_args) = matches.subcommand_matches("decrypt") {
+        let password = match matches.value_of("password") {
+            Some(val) => val,
+            None => error("no password supplied".to_string())
+        };
+        let out_file = decrypt_args.value_of("output").unwrap();
 
         decrypt(verbosity, input, out_file, password);
     } else {

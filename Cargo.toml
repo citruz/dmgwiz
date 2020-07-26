@@ -23,7 +23,7 @@ num-derive = "0.3"
 flate2 = "1.0.16"
 bzip2 = "0.4.1"
 adc = "0.1.0"
-lzfse = { version = "0.0.1", path = "lzfse-rs" }
+lzfse = "0.1.0"
 
 [lib]
 name = "dmgwiz"

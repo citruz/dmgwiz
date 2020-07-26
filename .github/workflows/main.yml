@@ -28,7 +28,7 @@ jobs:
             os: windows-latest
             rust: stable-x86_64-msvc
     steps:
-    - uses: actions/checkout@master
+    - uses: actions/checkout@main
       with:
         submodules: true
     - name: Install Rust (rustup)
@@ -43,10 +43,7 @@ jobs:
         Get-Command perl
         perl -v
       if: startsWith(matrix.os, 'windows')
-    - name: Run Cargo Test (LZFSE)
-      run: cargo test
-      working-directory: ./lzfse-rs
-    - name: Run Cargo Test (dmgwiz)
+    - name: Run Cargo Test
       run: cargo test
     - name: Build release binary
       run: cargo build --release
@@ -63,7 +60,7 @@ jobs:
     name: Rustfmt
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@master
+    - uses: actions/checkout@main
     - name: Install Rust
       run: rustup update stable && rustup default stable && rustup component add rustfmt
     - run: cargo fmt -- --check

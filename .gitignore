@@ -5,3 +5,4 @@
 
 tests/output*
 !tests/output_all.bin
+!tests/output_p4.bin

@@ -61,15 +61,13 @@ fn main() {
                 ),
         )
         .subcommand(
-            SubCommand::with_name("decrypt")
-                .about("Decrypt DMG")
-                .arg(
-                    Arg::with_name("output")
-                        .takes_value(true)
-                        .short("o")
-                        .required(true)
-                        .help("Path to write output"),
-                ),
+            SubCommand::with_name("decrypt").about("Decrypt DMG").arg(
+                Arg::with_name("output")
+                    .takes_value(true)
+                    .short("o")
+                    .required(true)
+                    .help("Path to write output"),
+            ),
         )
         .get_matches();
 
@@ -92,7 +90,7 @@ fn main() {
     if let Some(decrypt_args) = matches.subcommand_matches("decrypt") {
         let password = match matches.value_of("password") {
             Some(val) => val,
-            None => error("no password supplied".to_string())
+            None => error("no password supplied".to_string()),
         };
         let out_file = decrypt_args.value_of("output").unwrap();
 

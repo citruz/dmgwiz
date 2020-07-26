@@ -40,3 +40,4 @@ References
 TODO
 ----
 - verify checksums in DMG
+- add support for LZMA ("ULMO")

@@ -1,6 +1,7 @@
 /target
 **/*.rs.bk
-
+*.code-workspace
 .DS_Store
-tests/output.bin
-tests/output.dmg
+
+tests/output*
+!tests/output_all.bin

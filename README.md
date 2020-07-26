@@ -12,7 +12,7 @@ DmgWiz lets you extract raw filesystem data from compressed and encrypted DMG fi
 DmgWiz is both a CLI tool and a Rust crate so it can be integrated into other projects.
 
 
-[API Documentation](https://docs.rs/lzfse)
+[API Documentation](https://docs.rs/dmgwiz)
 ----------
 
 CLI Usage

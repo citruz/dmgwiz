@@ -15,8 +15,7 @@ itertools = "0.9"
 clap = "2"
 bincode = "1"
 serde = { version = "1", features = ["derive"] }
-ring = "0.16"
-openssl = { version = "0.10", features = ["vendored"] }
+ring = { version = "0.16", optional = true }
 plist = "1"
 num-traits = "0.2"
 num-derive = "0.3"
@@ -24,6 +23,11 @@ flate2 = "1"
 bzip2 = "0.4"
 adc = "0.1"
 lzfse = "0.1"
+
+[dependencies.openssl]
+version = "0.10"
+features = ["vendored"]
+optional = true
 
 [dev-dependencies]
 file_diff = "1"
@@ -35,3 +39,8 @@ path = "src/lib.rs"
 [[bin]]
 name = "dmgwiz"
 path = "src/main.rs"
+required-features = ["crypto"]
+
+[features]
+default = ["crypto"]
+crypto = ["openssl", "ring"]

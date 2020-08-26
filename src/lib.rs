@@ -14,11 +14,13 @@ use std::io::prelude::*;
 use std::io::Cursor;
 use std::io::SeekFrom;
 
-mod encrypted_reader;
+mod crypto;
 mod error;
 
-use encrypted_reader::EncryptedDmgHeader;
-pub use encrypted_reader::EncryptedDmgReader;
+use crypto::header::EncryptedDmgHeader;
+
+#[cfg(feature = "crypto")]
+pub use crypto::reader::EncryptedDmgReader;
 pub use error::{Error, Result};
 
 const SECTOR_SIZE: usize = 512;

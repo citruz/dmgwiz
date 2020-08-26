@@ -14,11 +14,13 @@ use std::io::prelude::*;
 use std::io::Cursor;
 use std::io::SeekFrom;
 
-mod encrypted_reader;
+mod crypto;
 mod error;
 
-use encrypted_reader::EncryptedDmgHeader;
-pub use encrypted_reader::EncryptedDmgReader;
+use crypto::header::EncryptedDmgHeader;
+
+#[cfg(feature = "crypto")]
+pub use crypto::reader::EncryptedDmgReader;
 pub use error::{Error, Result};
 
 const SECTOR_SIZE: usize = 512;
@@ -103,7 +105,7 @@ pub enum ChunkType {
     Zero = 0x00000000,
     Raw = 0x00000001,
     Ignore = 0x00000002,
-    //Comment = 0x7ffffffe,
+    Comment = 0x7ffffffe,
     ADC = 0x80000004,
     ZLIB = 0x80000005,
     BZLIB = 0x80000006,
@@ -361,13 +363,13 @@ where
             .and_then(|blkx| blkx.as_array())
             .ok_or_else(|| Error::InvalidInput("invalid plist structure".to_string()))?;
 
-        // convert partition dicts to Partiton objects
+        // convert partition dicts to Partition objects
         let partitions: Vec<Partition> = partitions_arr
             .iter()
             .map(|part| part.as_dictionary())
             .map(|part| Partition {
                 name: part
-                    .and_then(|p| p.get("Name"))
+                    .and_then(|p| p.get("Name").or_else(|| p.get("CFName")))
                     .and_then(|n| n.as_string())
                     .unwrap_or_default()
                     .to_string(),
@@ -551,14 +553,16 @@ where
             }
             // decompress
             let bytes_read = match chunk_type {
-                ChunkType::Ignore | ChunkType::Zero => fill_zero(&mut outbuf[0..out_len]),
+                ChunkType::Ignore | ChunkType::Zero | ChunkType::Comment => {
+                    fill_zero(&mut outbuf[0..out_len])
+                }
                 ChunkType::Raw => copy(&inbuf[0..in_len], &mut outbuf[0..out_len]),
                 ChunkType::ADC => decode_adc(&inbuf[0..in_len], &mut outbuf[0..out_len]),
                 ChunkType::ZLIB => decode_zlib(&inbuf[0..in_len], &mut outbuf[0..out_len]),
                 ChunkType::BZLIB => decode_bzlib(&inbuf[0..in_len], &mut outbuf[0..out_len]),
                 // lzfse buffer needs to be one byte larger to tell if the buffer was large enough
                 ChunkType::LZFSE => decode_lzfse(&inbuf[0..in_len], &mut outbuf[0..(out_len + 1)]),
-                ChunkType::Term => panic!(), // cannot happen
+                ChunkType::Term => unreachable!(),
             };
 
             match bytes_read {

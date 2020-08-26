@@ -1,14 +1,13 @@
-name: Build and Test
+name: CI
 on: [push, pull_request]
 
 jobs:
   test:
-    name: Test & Build
+    name: Run Tests and Build
     continue-on-error: true
-    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        build: [stable, beta, nightly, macos, win32, win64]
+        build: [stable, beta, nightly, macos, win64]
         include:
           - build: stable
             os: ubuntu-latest
@@ -22,19 +21,23 @@ jobs:
           - build: macos
             os: macos-latest
             rust: stable
-          - build: win32
-            os: windows-2016
-            rust: stable-i686-msvc
           - build: win64
             os: windows-latest
             rust: stable-x86_64-msvc
+          # win32 build seems to be broken atm
+          # - build: win32
+          #   os: windows-2016
+          #   rust: stable-i686-msvc
+    runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@main
       with:
         submodules: true
-    - name: Install Rust (rustup)
-      run: rustup update ${{ matrix.rust }} --no-self-update && rustup default ${{ matrix.rust }}
-      shell: bash
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+          toolchain: ${{ matrix.rust }}
+          override: true
     - name: Use strawberry perl
       if: startsWith(matrix.os, 'windows')
       run: echo ::set-env name=OPENSSL_SRC_PERL::C:/Strawberry/perl/bin/perl
@@ -44,18 +47,34 @@ jobs:
         Get-Command perl
         perl -v
       if: startsWith(matrix.os, 'windows')
-    - name: Run Cargo Test
-      run: cargo test
+
+    - name: Test without default features
+      uses: actions-rs/cargo@v1
+      with:
+        command: test
+        args: --no-default-features
+    - name: Test with default features
+      uses: actions-rs/cargo@v1
+      with:
+        command: test
+
     - name: Build release binary
-      run: cargo build --release
+      if: startsWith(matrix.rust, 'stable')
+      uses: actions-rs/cargo@v1
+      with:
+        command: build
+        args: --release
     - name: Delete intermediate files
+      if: startsWith(matrix.rust, 'stable')
       run: rm -rf ./target/release/{build,deps,incremental}
       shell: bash
     - name: Upload artifacts
+      if: startsWith(matrix.rust, 'stable')
       uses: actions/upload-artifact@v1
       with:
         name: dmgwiz_release_${{ matrix.build }}
         path: ./target/release/
+
 
   rustfmt:
     name: Rustfmt
@@ -63,8 +82,16 @@ jobs:
     steps:
     - uses: actions/checkout@main
     - name: Install Rust
-      run: rustup update stable && rustup default stable && rustup component add rustfmt
-    - run: cargo fmt -- --check
+      uses: actions-rs/toolchain@v1
+      with:
+          toolchain: stable
+          override: true
+          components: rustfmt
+    - uses: actions-rs/cargo@v1
+      with:
+        command: fmt
+        args: --all -- --check
+
 
   clippy:
     name: Clippy
@@ -72,5 +99,11 @@ jobs:
     steps:
     - uses: actions/checkout@main
     - name: Install Rust
-      run: rustup update stable && rustup default stable && rustup component add clippy
-    - run: cargo clippy
+      uses: actions-rs/toolchain@v1
+      with:
+          toolchain: stable
+          override: true
+          components: rustfmt
+    - uses: actions-rs/cargo@v1
+      with:
+        command: clippy

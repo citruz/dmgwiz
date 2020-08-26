@@ -46,6 +46,17 @@ Support for encrypted DMGs can be disabled to reduce the compilation time and am
 dmgwiz = {version = "0.2", default-features = false}
 ```
 
+Changelog
+---------
+
+0.2.0
+- Added support for comment chunks
+- Added `CFName` as fallback in case the `Name` attribute is not set
+- Separated crypto support in a feature (enabled by default)
+
+0.1.0
+- Initial release
+
 References
 ----------
 - [dmg2img](http://vu1tur.eu.org/tools/)

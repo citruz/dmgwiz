@@ -103,7 +103,7 @@ pub enum ChunkType {
     Zero = 0x00000000,
     Raw = 0x00000001,
     Ignore = 0x00000002,
-    //Comment = 0x7ffffffe,
+    Comment = 0x7ffffffe,
     ADC = 0x80000004,
     ZLIB = 0x80000005,
     BZLIB = 0x80000006,
@@ -551,14 +551,16 @@ where
             }
             // decompress
             let bytes_read = match chunk_type {
-                ChunkType::Ignore | ChunkType::Zero => fill_zero(&mut outbuf[0..out_len]),
+                ChunkType::Ignore | ChunkType::Zero | ChunkType::Comment => {
+                    fill_zero(&mut outbuf[0..out_len])
+                }
                 ChunkType::Raw => copy(&inbuf[0..in_len], &mut outbuf[0..out_len]),
                 ChunkType::ADC => decode_adc(&inbuf[0..in_len], &mut outbuf[0..out_len]),
                 ChunkType::ZLIB => decode_zlib(&inbuf[0..in_len], &mut outbuf[0..out_len]),
                 ChunkType::BZLIB => decode_bzlib(&inbuf[0..in_len], &mut outbuf[0..out_len]),
                 // lzfse buffer needs to be one byte larger to tell if the buffer was large enough
                 ChunkType::LZFSE => decode_lzfse(&inbuf[0..in_len], &mut outbuf[0..(out_len + 1)]),
-                ChunkType::Term => panic!(), // cannot happen
+                ChunkType::Term => unreachable!(),
             };
 
             match bytes_read {

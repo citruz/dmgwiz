@@ -361,13 +361,13 @@ where
             .and_then(|blkx| blkx.as_array())
             .ok_or_else(|| Error::InvalidInput("invalid plist structure".to_string()))?;
 
-        // convert partition dicts to Partiton objects
+        // convert partition dicts to Partition objects
         let partitions: Vec<Partition> = partitions_arr
             .iter()
             .map(|part| part.as_dictionary())
             .map(|part| Partition {
                 name: part
-                    .and_then(|p| p.get("Name"))
+                    .and_then(|p| p.get("Name").or_else(|| p.get("CFName")))
                     .and_then(|n| n.as_string())
                     .unwrap_or_default()
                     .to_string(),

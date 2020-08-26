@@ -1,7 +1,9 @@
 use file_diff::diff_files;
 use std::fs::File;
 
-use dmgwiz::{DmgWiz, EncryptedDmgReader, Verbosity};
+#[cfg(feature = "crypto")]
+use dmgwiz::EncryptedDmgReader;
+use dmgwiz::{DmgWiz, Verbosity};
 
 #[test]
 fn test_reader() {
@@ -64,12 +66,14 @@ fn test_extract_partition() {
     ));
 }
 
+#[cfg(feature = "crypto")]
 #[test]
 fn test_encrypted_reader() {
     let input = File::open("tests/input_aes256.dmg").unwrap();
     EncryptedDmgReader::from_reader(input, "test123", Verbosity::None).unwrap();
 }
 
+#[cfg(feature = "crypto")]
 #[test]
 fn test_encrypted_reader_read_all() {
     let input = File::open("tests/input_aes256.dmg").unwrap();

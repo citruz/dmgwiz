@@ -27,6 +27,8 @@ pub enum Error {
     UnsupportedEncryption(String),
     /// The DMG could not be decrypted using the given password.
     InvalidPassword,
+
+    #[cfg(feature = "crypto")]
     /// There was an OpenSSL error during decryption.
     Decryption(openssl::error::ErrorStack),
 }
@@ -35,6 +37,7 @@ impl std::error::Error for Error {
     fn cause(&self) -> Option<&dyn std::error::Error> {
         match *self {
             Error::Io(ref err) => Some(err),
+            #[cfg(feature = "crypto")]
             Error::Decryption(ref err) => Some(err),
             _ => None,
         }
@@ -53,7 +56,6 @@ impl fmt::Display for Error {
                 write!(f, "unsupported encryption parameters: {}", str)
             }
             Error::InvalidPassword => write!(f, "invalid password given"),
-            Error::Decryption(_) => write!(f, "error during decryption"),
             Error::Decompress {
                 partition_num,
                 chunk_num,
@@ -65,6 +67,9 @@ impl fmt::Display for Error {
             ),
             Error::Io(ref e) => e.fmt(f),
             Error::Parse(ref e) => write!(f, "parse error ({})", e),
+
+            #[cfg(feature = "crypto")]
+            Error::Decryption(_) => write!(f, "error during decryption"),
         }
     }
 }
@@ -93,6 +98,7 @@ impl From<plist::Error> for Error {
     }
 }
 
+#[cfg(feature = "crypto")]
 impl From<openssl::error::ErrorStack> for Error {
     fn from(err: openssl::error::ErrorStack) -> Error {
         Error::Decryption(err)

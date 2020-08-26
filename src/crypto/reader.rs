@@ -10,11 +10,11 @@ use openssl::pkey::PKey;
 use openssl::sign::Signer;
 use openssl::symm::{decrypt as openssl_decrypt, Cipher, Crypter, Mode};
 use ring::pbkdf2;
-use serde::{Deserialize, Serialize};
 
 static PBKDF2_ALG: pbkdf2::Algorithm = pbkdf2::PBKDF2_HMAC_SHA1;
 
-use super::{Error, Result, Verbosity};
+use super::header::EncryptedDmgHeader;
+use crate::{Error, Result, Verbosity};
 
 // how can i use macro from super?
 macro_rules! printDebug {
@@ -23,44 +23,6 @@ macro_rules! printDebug {
             println!($($arg)*);
         }
     })
-}
-
-/// Header used for encrypted DMGs
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
-pub struct EncryptedDmgHeader {
-    signature: [char; 8],
-    version: u32,
-    enc_iv_size: u32,
-    unk1: u32,
-    unk2: u32,
-    data_enc_key_bits: u32,
-    unk4: u32,
-    hmac_key_bits: u32,
-    uuid: [u8; 16],
-    blocksize: u32,
-    datasize: u64,
-    dataoffset: u64,
-    unk6: [u8; 24],
-    kdf_algorithm: u32,
-    kdf_prng_algorithm: u32,
-    kdf_iteration_count: u32,
-    kdf_salt_len: u32,
-    kdf_salt: [u8; 32],
-    blob_enc_iv_size: u32,
-    blob_enc_iv: [u8; 32],
-    blob_enc_key_bits: u32,
-    blob_enc_algorithm: u32,
-    blob_enc_padding: u32,
-    blob_enc_mode: u32,
-    encrypted_keyblob_size: u32,
-    encrypted_keyblob1: [u8; 32],
-    encrypted_keyblob2: [u8; 32],
-}
-
-impl EncryptedDmgHeader {
-    pub fn get_signature(&self) -> String {
-        self.signature.iter().collect::<String>()
-    }
 }
 
 /// Reader to read from encrypted DMGs

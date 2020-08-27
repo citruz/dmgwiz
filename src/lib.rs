@@ -3,13 +3,13 @@ use bincode::Options;
 use bzip2::read::BzDecoder;
 use flate2::read::ZlibDecoder;
 use itertools::Itertools;
-use lzfse::decode_buffer as lzfse_decode_buffer;
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 use serde::{Deserialize, Serialize};
 use std::cmp;
 use std::cmp::Ordering;
 use std::fmt;
+use std::io;
 use std::io::prelude::*;
 use std::io::Cursor;
 use std::io::SeekFrom;
@@ -481,24 +481,6 @@ where
             )));
         }
 
-        // allocate buffers for in and output
-        let max_compressed_length = partition
-            .blkx_table
-            .chunks
-            .iter()
-            .fold(0, |max, c| cmp::max(max, c.compressed_length))
-            as usize;
-        let max_sector_count = partition
-            .blkx_table
-            .chunks
-            .iter()
-            .fold(0, |max, c| cmp::max(max, c.sector_count))
-            as usize;
-
-        let mut inbuf = vec![0; max_compressed_length];
-        // need to add one additional byte for lzfse decompression
-        let mut outbuf = vec![0; (max_sector_count * SECTOR_SIZE) + 1];
-
         let mut sectors_written = 0;
 
         for (chunk_num, chunk) in partition.blkx_table.chunks.iter().enumerate() {
@@ -522,16 +504,6 @@ where
                 return Ok(sectors_written as usize * SECTOR_SIZE);
             }
 
-            // position input at start of chunk
-            self.input
-                .seek(SeekFrom::Start(self.data_offset + chunk.compressed_offset))?;
-
-            let in_len = chunk.compressed_length as usize;
-            let out_len = chunk.sector_count as usize * SECTOR_SIZE;
-
-            // read compressed chunk
-            self.input.read_exact(&mut inbuf[0..in_len])?;
-
             // usually sectors are consecutive, but let's check to be sure.
             // if chunk.sector_number is less than what we have already written we have a problem.
             // otherwise just write NULL sectors.
@@ -551,22 +523,32 @@ where
                 }
                 Ordering::Equal => (),
             }
+
+            let in_len = chunk.compressed_length as usize;
+            let out_len = chunk.sector_count as usize * SECTOR_SIZE;
+
+            let chunk_offset = self.data_offset + chunk.compressed_offset;
+            self.input.seek(SeekFrom::Start(chunk_offset))?;
+            let mut chunk_input = BoundedReader {
+                inner: &mut self.input,
+                len: in_len,
+            };
+
             // decompress
             let bytes_read = match chunk_type {
                 ChunkType::Ignore | ChunkType::Zero | ChunkType::Comment => {
-                    fill_zero(&mut outbuf[0..out_len])
+                    write_zero(&mut output, out_len)
                 }
-                ChunkType::Raw => copy(&inbuf[0..in_len], &mut outbuf[0..out_len]),
-                ChunkType::ADC => decode_adc(&inbuf[0..in_len], &mut outbuf[0..out_len]),
-                ChunkType::ZLIB => decode_zlib(&inbuf[0..in_len], &mut outbuf[0..out_len]),
-                ChunkType::BZLIB => decode_bzlib(&inbuf[0..in_len], &mut outbuf[0..out_len]),
-                // lzfse buffer needs to be one byte larger to tell if the buffer was large enough
-                ChunkType::LZFSE => decode_lzfse(&inbuf[0..in_len], &mut outbuf[0..(out_len + 1)]),
+                ChunkType::Raw => copy(&mut chunk_input, &mut output),
+                ChunkType::ADC => decode_adc(&mut chunk_input, &mut output),
+                ChunkType::ZLIB => decode_zlib(&mut chunk_input, &mut output),
+                ChunkType::BZLIB => decode_bzlib(&mut chunk_input, &mut output),
+                ChunkType::LZFSE => decode_lzfse(&mut chunk_input, &mut output),
                 ChunkType::Term => unreachable!(),
             };
 
             match bytes_read {
-                Some(val) if val == out_len => printDebug!(self, "decompressed {} bytes", val),
+                Ok(val) if val == out_len => printDebug!(self, "decompressed {} bytes", val),
                 _ => {
                     return Err(Error::Decompress {
                         partition_num,
@@ -576,8 +558,6 @@ where
                 }
             };
 
-            // write to ouput
-            output.write_all(&outbuf[0..out_len])?;
             sectors_written += chunk.sector_count;
         }
 
@@ -599,45 +579,50 @@ where
     }
 }
 
-fn decode_zlib(inbuf: &[u8], outbuf: &mut [u8]) -> Option<usize> {
-    let mut z = ZlibDecoder::new(&inbuf[..]);
-    match z.read_exact(outbuf) {
-        Err(_) => None,
-        Ok(_) => Some(outbuf.len()),
+struct BoundedReader<R> {
+    inner: R,
+    len: usize,
+}
+
+impl<R: Read> Read for BoundedReader<R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let max_len = cmp::min(self.len, buf.len());
+        let read_len = self.inner.read(&mut buf[..max_len])?;
+        self.len -= read_len;
+        Ok(read_len)
     }
 }
 
-fn decode_bzlib(inbuf: &[u8], outbuf: &mut [u8]) -> Option<usize> {
-    let mut z = BzDecoder::new(&inbuf[..]);
-    match z.read_exact(outbuf) {
-        Err(_) => None,
-        Ok(_) => Some(outbuf.len()),
-    }
+fn decode_zlib<R: Read, W: Write>(src: &mut R, dest: &mut W) -> Result<usize> {
+    let mut z = ZlibDecoder::new(src);
+    let len = io::copy(&mut z, dest)?;
+    Ok(len as usize)
 }
 
-fn decode_lzfse(inbuf: &[u8], outbuf: &mut [u8]) -> Option<usize> {
-    match lzfse_decode_buffer(inbuf, outbuf) {
-        Err(_) => None,
-        Ok(val) => Some(val),
-    }
+fn decode_bzlib<R: Read, W: Write>(src: &mut R, dest: &mut W) -> Result<usize> {
+    let mut bz = BzDecoder::new(src);
+    let len = io::copy(&mut bz, dest)?;
+    Ok(len as usize)
 }
 
-fn decode_adc(inbuf: &[u8], outbuf: &mut [u8]) -> Option<usize> {
-    let mut z = AdcDecoder::new(&inbuf[..]);
-    match z.decompress_into(outbuf) {
-        Ok(val) => Some(val),
-        Err(_) => None,
-    }
+fn decode_lzfse<R: Read, W: Write>(src: &mut R, dest: &mut W) -> Result<usize> {
+    unimplemented!("need to adapt lzfse crate first");
 }
 
-fn fill_zero(outbuf: &mut [u8]) -> Option<usize> {
-    for i in &mut outbuf[..] {
-        *i = 0
-    }
-    Some(outbuf.len())
+fn decode_adc<R: Read, W: Write>(src: &mut R, dest: &mut W) -> Result<usize> {
+    let mut adc = AdcDecoder::new(src);
+    //let len = io::copy(&mut adc, dest)?;
+    //Ok(len as usize)
+    unimplemented!("need to impl Read for AdcDecoder first");
 }
 
-fn copy(inbuf: &[u8], outbuf: &mut [u8]) -> Option<usize> {
-    outbuf.copy_from_slice(inbuf);
-    Some(outbuf.len())
+fn write_zero<W: Write>(w: &mut W, len: usize) -> Result<usize> {
+    let mut zeros = io::repeat(0).take(len as u64);
+    io::copy(&mut zeros, w)?;
+    Ok(len)
+}
+
+fn copy<R: Read, W: Write>(src: &mut R, dest: &mut W) -> Result<usize> {
+    let len = io::copy(src, dest)?;
+    Ok(len as usize)
 }

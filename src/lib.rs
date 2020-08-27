@@ -408,11 +408,13 @@ where
     /// # Example
     ///
     /// ```
-    /// use std::fs::File;
+    /// use std::{fs::File, io::BufWriter};
     /// use dmgwiz::{DmgWiz, Verbosity};
     ///
     /// let input = File::open("tests/input_zlib.dmg").unwrap();
-    /// let output = File::create("tests/output_zlib.bin").unwrap();
+    /// let outfile = File::create("tests/output_zlib.bin").unwrap();
+    /// let output = BufWriter::new(outfile);
+    ///
     /// let mut wiz = DmgWiz::from_reader(input, Verbosity::None).unwrap();
     /// match wiz.extract_all(output) {
     ///     Err(err) => panic!(format!("error while extracting: {}", err)),
@@ -444,11 +446,13 @@ where
     /// # Example
     ///
     /// ```
-    /// use std::fs::File;
+    /// use std::{fs::File, io::BufWriter};
     /// use dmgwiz::{DmgWiz, Verbosity};
     ///
     /// let input = File::open("tests/input_zlib.dmg").unwrap();
-    /// let output = File::create("tests/output_zlib.bin").unwrap();
+    /// let outfile = File::create("tests/output_zlib.bin").unwrap();
+    /// let output = BufWriter::new(outfile);
+    ///
     /// let mut wiz = DmgWiz::from_reader(input, Verbosity::None).unwrap();
     /// match wiz.extract_partition(output, 0) {
     ///     Err(err) => panic!(format!("error while extracting: {}", err)),

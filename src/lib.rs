@@ -16,6 +16,7 @@ use std::io::SeekFrom;
 
 mod crypto;
 mod error;
+mod lzfse;
 
 use crypto::header::EncryptedDmgHeader;
 
@@ -610,14 +611,15 @@ fn decode_bzlib<R: Read, W: Write>(src: &mut R, dest: &mut W) -> Result<usize> {
 }
 
 fn decode_lzfse<R: Read, W: Write>(src: &mut R, dest: &mut W) -> Result<usize> {
-    unimplemented!("need to adapt lzfse crate first");
+    let mut lz = lzfse::Decoder::new(src);
+    let len = io::copy(&mut lz, dest)?;
+    Ok(len as usize)
 }
 
 fn decode_adc<R: Read, W: Write>(src: &mut R, dest: &mut W) -> Result<usize> {
     let mut adc = AdcDecoder::new(src);
-    //let len = io::copy(&mut adc, dest)?;
-    //Ok(len as usize)
-    unimplemented!("need to impl Read for AdcDecoder first");
+    let len = io::copy(&mut adc, dest)?;
+    Ok(len as usize)
 }
 
 fn write_zero<W: Write>(w: &mut W, len: usize) -> Result<usize> {

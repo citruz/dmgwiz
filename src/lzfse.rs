@@ -5,6 +5,7 @@ use std::{
     io::{self, Read},
 };
 
+/// Wrapper around the lzfse library which implements the `Read` trait to access decompressed data
 pub struct Decoder<R> {
     input: R,
     buf: Option<VecDeque<u8>>,

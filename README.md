@@ -49,6 +49,9 @@ dmgwiz = {version = "0.2", default-features = false}
 Changelog
 ---------
 
+0.2.1
+- Removed temporary buffers for decompression
+
 0.2.0
 - Added support for comment chunks
 - Added `CFName` as fallback in case the `Name` attribute is not set

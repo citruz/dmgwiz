@@ -1,5 +1,6 @@
 use file_diff::diff_files;
 use std::fs::File;
+use std::io::BufWriter;
 
 #[cfg(feature = "crypto")]
 use dmgwiz::EncryptedDmgReader;
@@ -15,7 +16,9 @@ fn test_reader() {
 
 fn extract_all_test(inpath: &str, outpath: &str) {
     let input = File::open(inpath).unwrap();
-    let output = File::create(outpath).unwrap();
+    let outfile = File::create(outpath).unwrap();
+    let output = BufWriter::new(outfile);
+
     let mut wiz = DmgWiz::from_reader(input, Verbosity::None).unwrap();
     let bytes_written = wiz.extract_all(output).unwrap();
     assert_eq!(bytes_written, 10510336);
@@ -55,7 +58,9 @@ fn test_extract_all_lzma() {
 #[test]
 fn test_extract_partition() {
     let input = File::open("tests/input_zlib.dmg").unwrap();
-    let output = File::create("tests/output_zlib_p4.bin").unwrap();
+    let outfile = File::create("tests/output_zlib_p4.bin").unwrap();
+    let output = BufWriter::new(outfile);
+
     let mut wiz = DmgWiz::from_reader(input, Verbosity::None).unwrap();
     let bytes_written = wiz.extract_partition(output, 4).unwrap();
 
@@ -77,7 +82,9 @@ fn test_encrypted_reader() {
 #[test]
 fn test_encrypted_reader_read_all() {
     let input = File::open("tests/input_aes256.dmg").unwrap();
-    let output = File::create("tests/output_aes256.dmg").unwrap();
+    let outfile = File::create("tests/output_aes256.dmg").unwrap();
+    let output = BufWriter::new(outfile);
+
     let mut reader = EncryptedDmgReader::from_reader(input, "test123", Verbosity::None).unwrap();
     let bytes_written = reader.read_all(output).unwrap();
 

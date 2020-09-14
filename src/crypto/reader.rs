@@ -152,11 +152,13 @@ where
     /// # Example
     ///
     /// ```
-    /// use std::fs::File;
+    /// use std::{fs::File, io::BufWriter};
     /// use dmgwiz::{EncryptedDmgReader, Verbosity};
     ///
     /// let input = File::open("tests/input_aes256.dmg").unwrap();
-    /// let output = File::create("tests/output.dmg").unwrap();
+    /// let outfile = File::create("tests/output.dmg").unwrap();
+    /// let output = BufWriter::new(outfile);
+    ///
     /// let mut reader = EncryptedDmgReader::from_reader(input, "test123", Verbosity::None).unwrap();
     /// match reader.read_all(output) {
     ///     Err(err) => panic!(format!("error while decrypting: {}", err)),

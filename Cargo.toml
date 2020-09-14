@@ -1,7 +1,7 @@
 [package]
 name = "dmgwiz"
 description = "Extract filesystem data from DMG files"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["Felix Seele <fseele@gmail.com>"]
 edition = "2018"
 license = "MIT"
@@ -14,6 +14,7 @@ categories = ["command-line-utilities", "encoding", "filesystem", "parsing"]
 itertools = "0.9"
 clap = "2"
 bincode = "1"
+byteorder = "1"
 serde = { version = "1", features = ["derive"] }
 ring = { version = "0.16", optional = true }
 plist = "1"
@@ -21,7 +22,7 @@ num-traits = "0.2"
 num-derive = "0.3"
 flate2 = "1"
 bzip2 = "0.4"
-adc = "0.1"
+adc = "0.2"
 lzfse = "0.1"
 
 [dependencies.openssl]

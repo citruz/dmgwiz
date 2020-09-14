@@ -363,19 +363,25 @@ where
             .and_then(|blkx| blkx.as_array())
             .ok_or_else(|| Error::InvalidInput("invalid plist structure".to_string()))?;
 
+        fn get_string<'a>(dict: &'a plist::Dictionary, name: &str) -> Option<&'a str> {
+            dict.get(name).and_then(|v| v.as_string())
+        }
+
         // convert partition dicts to Partition objects
         let partitions: Vec<Partition> = partitions_arr
             .iter()
             .map(|part| part.as_dictionary())
             .map(|part| Partition {
                 name: part
-                    .and_then(|p| p.get("Name").or_else(|| p.get("CFName")))
-                    .and_then(|n| n.as_string())
+                    .and_then(|p| {
+                        get_string(p, "Name")
+                            .filter(|n| !n.is_empty())
+                            .or_else(|| get_string(p, "CFName"))
+                    })
                     .unwrap_or_default()
                     .to_string(),
                 attributes: part
-                    .and_then(|p| p.get("Attributes"))
-                    .and_then(|n| n.as_string())
+                    .and_then(|p| get_string(p, "Attributes"))
                     .unwrap_or_default()
                     .to_string(),
                 blkx_table: part

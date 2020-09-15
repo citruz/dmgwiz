@@ -62,7 +62,7 @@ impl fmt::Display for Error {
                 ref chunk_type,
             } => write!(
                 f,
-                "there was an error during decompression (partition={} chunk={} type={:?}",
+                "there was an error during decompression (partition={} chunk={} type={:?})",
                 partition_num, chunk_num, chunk_type
             ),
             Error::Io(ref e) => e.fmt(f),

@@ -16,7 +16,6 @@ use std::io::SeekFrom;
 
 mod crypto;
 mod error;
-mod lzfse;
 
 use crypto::header::EncryptedDmgHeader;
 
@@ -554,7 +553,7 @@ where
                 ChunkType::ADC => decode_adc(&mut chunk_input, &mut output),
                 ChunkType::ZLIB => decode_zlib(&mut chunk_input, &mut output),
                 ChunkType::BZLIB => decode_bzlib(&mut chunk_input, &mut output),
-                ChunkType::LZFSE => decode_lzfse(&mut chunk_input, &mut output),
+                ChunkType::LZFSE => decode_lzfse(&mut chunk_input, &mut output, out_len),
                 ChunkType::Term => unreachable!(),
             };
 
@@ -616,10 +615,17 @@ fn decode_bzlib<R: Read, W: Write>(src: &mut R, dest: &mut W) -> Result<usize> {
     Ok(len as usize)
 }
 
-fn decode_lzfse<R: Read, W: Write>(src: &mut R, dest: &mut W) -> Result<usize> {
-    let mut lz = lzfse::Decoder::new(src);
-    let len = io::copy(&mut lz, dest)?;
-    Ok(len as usize)
+fn decode_lzfse<R: Read, W: Write>(src: &mut R, dest: &mut W, dest_size: usize) -> Result<usize> {
+    let input = src.bytes().collect::<io::Result<Vec<_>>>()?;
+    // We need to allocate one byte more because the lzfse library internally
+    // uses `buf.len()` to signal a too-small output buffer.
+    let mut out_buf = vec![0; dest_size + 1];
+
+    let len = lzfse::decode_buffer(&input, &mut out_buf)
+        .map_err(|_| Error::InvalidInput("lzfse decompression failed".into()))?;
+
+    dest.write_all(&out_buf[..dest_size])?;
+    Ok(len)
 }
 
 fn decode_adc<R: Read, W: Write>(src: &mut R, dest: &mut W) -> Result<usize> {

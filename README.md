@@ -49,6 +49,9 @@ dmgwiz = {version = "0.2", default-features = false}
 Changelog
 ---------
 
+0.2.2
+- Reverted to buffer-based decoding for LZFSE
+
 0.2.1
 - Removed temporary buffers for decompression
 

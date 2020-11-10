@@ -418,7 +418,7 @@ where
     /// use dmgwiz::{DmgWiz, Verbosity};
     ///
     /// let input = File::open("tests/input_zlib.dmg").unwrap();
-    /// let outfile = File::create("tests/output_zlib.bin").unwrap();
+    /// let outfile = File::create("tests/tmp_output_zlib.bin").unwrap();
     /// let output = BufWriter::new(outfile);
     ///
     /// let mut wiz = DmgWiz::from_reader(input, Verbosity::None).unwrap();
@@ -456,7 +456,7 @@ where
     /// use dmgwiz::{DmgWiz, Verbosity};
     ///
     /// let input = File::open("tests/input_zlib.dmg").unwrap();
-    /// let outfile = File::create("tests/output_zlib.bin").unwrap();
+    /// let outfile = File::create("tests/tmp_output_zlib.bin").unwrap();
     /// let output = BufWriter::new(outfile);
     ///
     /// let mut wiz = DmgWiz::from_reader(input, Verbosity::None).unwrap();

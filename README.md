@@ -11,6 +11,7 @@ DmgWiz lets you extract raw filesystem data from compressed and encrypted DMG fi
 
 DmgWiz is both a CLI tool and a Rust crate so it can be integrated into other projects.
 
+**[🚀 &nbsp;&nbsp;Download](https://github.com/citruz/dmgwiz/releases)**
 
 CLI Usage
 ---------
@@ -40,7 +41,7 @@ Crate Usage
 
 DmgWiz can also be used as a crate in other Rust projects. Please see the [API Documentation](https://docs.rs/dmgwiz) and `main.rs` for examples how to use it.
 
-Support for encrypted DMGs can be disabled to reduce the compilation time and amount of C code. To do this, add the `default-features = false` option in your `Cargo.toml`:
+Support for encrypted DMGs can be disabled to reduce the compilation time and amount of C code. To do this, add the `default-features = false` option in your `Cargo.toml`:&nbsp;
 ```TOML
 [dependencies]
 dmgwiz = {version = "0.2", default-features = false}

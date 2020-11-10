@@ -15,6 +15,10 @@ fn test_reader() {
 }
 
 fn extract_all_test(inpath: &str, outpath: &str) {
+    extract_all_test_generic(inpath, outpath, "tests/output_all.bin")
+}
+
+fn extract_all_test_generic(inpath: &str, outpath: &str, cmp_path: &str) {
     let input = File::open(inpath).unwrap();
     let outfile = File::create(outpath).unwrap();
     let output = BufWriter::new(outfile);
@@ -25,7 +29,7 @@ fn extract_all_test(inpath: &str, outpath: &str) {
 
     assert!(diff_files(
         &mut File::open(outpath).unwrap(),
-        &mut File::open("tests/output_all.bin").unwrap()
+        &mut File::open(cmp_path).unwrap()
     ));
 }
 
@@ -53,6 +57,13 @@ fn test_extract_all_lzfse() {
 // lzma support is not implemented yet
 fn test_extract_all_lzma() {
     extract_all_test("tests/input_lzma.dmg", "tests/output_lzma.bin")
+}
+
+
+#[test]
+// very few DMGs have partitions with a blkx_table.data_offset != 0
+fn test_extract_all_non_null_data_offset() {
+    extract_all_test_generic("tests/input_non_null_data_offset.dmg", "tests/output_non_null_data_offset_tmp.bin", "tests/output_non_null_data_offset.bin")
 }
 
 #[test]

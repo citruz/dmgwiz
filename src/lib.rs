@@ -483,14 +483,6 @@ where
 
         printDebug!(self, "{}", partition);
 
-        if partition.blkx_table.data_offset != 0 {
-            // data_offset always seems to be 0, let's just be sure
-            return Err(Error::InvalidInput(format!(
-                "invalid data offset of partition {}: {}",
-                partition_num, partition.blkx_table.data_offset
-            )));
-        }
-
         let mut sectors_written = 0;
 
         for (chunk_num, chunk) in partition.blkx_table.chunks.iter().enumerate() {
@@ -537,7 +529,7 @@ where
             let in_len = chunk.compressed_length as usize;
             let out_len = chunk.sector_count as usize * SECTOR_SIZE;
 
-            let chunk_offset = self.data_offset + chunk.compressed_offset;
+            let chunk_offset = self.data_offset + partition.blkx_table.data_offset + chunk.compressed_offset;
             self.input.seek(SeekFrom::Start(chunk_offset))?;
             let mut chunk_input = BoundedReader {
                 inner: &mut self.input,

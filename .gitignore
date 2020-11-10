@@ -3,6 +3,4 @@
 *.code-workspace
 .DS_Store
 
-tests/output*
-!tests/output_all.bin
-!tests/output_p4.bin
+tests/tmp_output*

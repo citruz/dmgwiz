@@ -19,7 +19,7 @@ fn error(msg: String) -> ! {
 
 fn main() {
     let matches = App::new("dmgwiz")
-        .version("0.2.2")
+        .version("0.2.3")
         .author("Felix Seele <fseele@gmail.com>")
         .about("Extract filesystem data from DMG files")
         .arg(

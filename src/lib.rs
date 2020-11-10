@@ -418,7 +418,7 @@ where
     /// use dmgwiz::{DmgWiz, Verbosity};
     ///
     /// let input = File::open("tests/input_zlib.dmg").unwrap();
-    /// let outfile = File::create("tests/output_zlib.bin").unwrap();
+    /// let outfile = File::create("tests/tmp_output_zlib.bin").unwrap();
     /// let output = BufWriter::new(outfile);
     ///
     /// let mut wiz = DmgWiz::from_reader(input, Verbosity::None).unwrap();
@@ -456,7 +456,7 @@ where
     /// use dmgwiz::{DmgWiz, Verbosity};
     ///
     /// let input = File::open("tests/input_zlib.dmg").unwrap();
-    /// let outfile = File::create("tests/output_zlib.bin").unwrap();
+    /// let outfile = File::create("tests/tmp_output_zlib.bin").unwrap();
     /// let output = BufWriter::new(outfile);
     ///
     /// let mut wiz = DmgWiz::from_reader(input, Verbosity::None).unwrap();
@@ -482,14 +482,6 @@ where
         );
 
         printDebug!(self, "{}", partition);
-
-        if partition.blkx_table.data_offset != 0 {
-            // data_offset always seems to be 0, let's just be sure
-            return Err(Error::InvalidInput(format!(
-                "invalid data offset of partition {}: {}",
-                partition_num, partition.blkx_table.data_offset
-            )));
-        }
 
         let mut sectors_written = 0;
 
@@ -537,7 +529,8 @@ where
             let in_len = chunk.compressed_length as usize;
             let out_len = chunk.sector_count as usize * SECTOR_SIZE;
 
-            let chunk_offset = self.data_offset + chunk.compressed_offset;
+            let chunk_offset =
+                self.data_offset + partition.blkx_table.data_offset + chunk.compressed_offset;
             self.input.seek(SeekFrom::Start(chunk_offset))?;
             let mut chunk_input = BoundedReader {
                 inner: &mut self.input,

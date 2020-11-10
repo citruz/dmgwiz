@@ -49,6 +49,9 @@ dmgwiz = {version = "0.2", default-features = false}
 Changelog
 ---------
 
+0.2.3
+- Fixed handling of DMGs with a non-null value in blkx_table.data_offset
+
 0.2.2
 - Reverted to buffer-based decoding for LZFSE
 

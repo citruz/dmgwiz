@@ -156,7 +156,7 @@ where
     /// use dmgwiz::{EncryptedDmgReader, Verbosity};
     ///
     /// let input = File::open("tests/input_aes256.dmg").unwrap();
-    /// let outfile = File::create("tests/output.dmg").unwrap();
+    /// let outfile = File::create("tests/tmp_output.dmg").unwrap();
     /// let output = BufWriter::new(outfile);
     ///
     /// let mut reader = EncryptedDmgReader::from_reader(input, "test123", Verbosity::None).unwrap();

@@ -1,6 +1,6 @@
 use file_diff::diff_files;
-use std::fs::File;
 use std::fs::metadata;
+use std::fs::File;
 use std::io::BufWriter;
 
 #[cfg(feature = "crypto")]
@@ -61,11 +61,14 @@ fn test_extract_all_lzma() {
     extract_all_test("tests/input_lzma.dmg", "tests/tmp_output_lzma.bin")
 }
 
-
 #[test]
 // very few DMGs have partitions with a blkx_table.data_offset != 0
 fn test_extract_all_non_null_data_offset() {
-    extract_all_test_generic("tests/input_non_null_data_offset.dmg", "tests/tmp_output_non_null_data_offset.bin", "tests/output_non_null_data_offset.bin")
+    extract_all_test_generic(
+        "tests/input_non_null_data_offset.dmg",
+        "tests/tmp_output_non_null_data_offset.bin",
+        "tests/output_non_null_data_offset.bin",
+    )
 }
 
 #[test]

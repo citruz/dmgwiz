@@ -529,7 +529,8 @@ where
             let in_len = chunk.compressed_length as usize;
             let out_len = chunk.sector_count as usize * SECTOR_SIZE;
 
-            let chunk_offset = self.data_offset + partition.blkx_table.data_offset + chunk.compressed_offset;
+            let chunk_offset =
+                self.data_offset + partition.blkx_table.data_offset + chunk.compressed_offset;
             self.input.seek(SeekFrom::Start(chunk_offset))?;
             let mut chunk_input = BoundedReader {
                 inner: &mut self.input,

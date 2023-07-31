@@ -141,7 +141,7 @@ checksum = "8810e7e2cf385b1e9b50d68264908ec367ba642c96d02edfe61c39e88e2a3c01"
 
 [[package]]
 name = "dmgwiz"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "adc",
  "bincode",

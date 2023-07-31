@@ -1,6 +1,6 @@
 DmgWiz
 ======
-![Build and Test](https://github.com/citruz/dmgwiz/workflows/Build%20and%20Test/badge.svg?branch=main)
+[![CI](https://github.com/citruz/dmgwiz/actions/workflows/main.yml/badge.svg?branch=main)](https://github.com/citruz/dmgwiz/actions/workflows/main.yml)
 [![crates.io](https://img.shields.io/crates/v/dmgwiz)](https://crates.io/crates/dmgwiz)
 
 DmgWiz lets you extract raw filesystem data from compressed and encrypted DMG files. It started as a [dmg2img](http://vu1tur.eu.org/tools/) clone but has more features and is more secure due to the Rust programming language.
@@ -49,6 +49,9 @@ dmgwiz = {version = "0.2", default-features = false}
 
 Changelog
 ---------
+
+0.2.4
+- Fixed parsing of XML with plist 1.5
 
 0.2.3
 - Fixed handling of DMGs with a non-null value in blkx_table.data_offset

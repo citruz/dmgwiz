@@ -352,7 +352,8 @@ where
 
         // read plist
         input.seek(SeekFrom::Start(header.xml_offset))?;
-        let mut plist = plist::Value::from_reader_xml(&mut input)?;
+        let partial_reader = input.by_ref().take(header.xml_length);
+        let mut plist = plist::Value::from_reader_xml(partial_reader)?;
 
         // get partitions from dict
         let partitions_arr = plist

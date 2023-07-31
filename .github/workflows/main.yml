@@ -40,7 +40,7 @@ jobs:
           override: true
     - name: Use strawberry perl
       if: startsWith(matrix.os, 'windows')
-      run: echo ::set-env name=OPENSSL_SRC_PERL::C:/Strawberry/perl/bin/perl
+      run: echo "name=OPENSSL_SRC_PERL::C:/Strawberry/perl/bin/perl" >> $GITHUB_ENV
       shell: bash
     - name: Test Perl (Windows)
       run: |

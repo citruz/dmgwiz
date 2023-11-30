@@ -5,7 +5,7 @@ use std::io::BufWriter;
 use std::path::Path;
 use std::process;
 
-use clap::{App, Arg, SubCommand};
+use clap::{Arg, ArgAction, Command};
 
 use dmgwiz::{DmgWiz, EncryptedDmgReader, Verbosity};
 
@@ -18,53 +18,58 @@ fn error(msg: String) -> ! {
 }
 
 fn main() {
-    let matches = App::new("dmgwiz")
+    let matches = Command::new("dmgwiz")
         .version("0.2.4")
         .author("Felix Seele <fseele@gmail.com>")
         .about("Extract filesystem data from DMG files")
         .arg(
-            Arg::with_name("INPUT")
+            Arg::new("INPUT")
                 .help("Sets the input file to use")
                 .required(true)
                 .index(1),
         )
-        .arg(Arg::with_name("quiet").short("q").help("Only print errors"))
         .arg(
-            Arg::with_name("v")
-                .short("v")
-                .multiple(true)
+            Arg::new("quiet")
+                .short('q')
+                .action(ArgAction::SetTrue)
+                .help("Only print errors"),
+        )
+        .arg(
+            Arg::new("v")
+                .short('v')
+                .action(ArgAction::Count)
                 .help("Sets the level of verbosity (multiple allowed)"),
         )
         .arg(
-            Arg::with_name("password")
-                .short("p")
-                .takes_value(true)
+            Arg::new("password")
+                .short('p')
+                .num_args(1)
                 .help("Password for encrypted DMGs"),
         )
-        .subcommand(SubCommand::with_name("info").about("Print DMG partitions"))
+        .subcommand(Command::new("info").about("Print DMG partitions"))
         .subcommand(
-            SubCommand::with_name("extract")
+            Command::new("extract")
                 .about("Extract single or all partitions")
                 .arg(
-                    Arg::with_name("partition")
-                        .takes_value(true)
-                        .short("n")
+                    Arg::new("partition")
+                        .num_args(1)
+                        .short('n')
                         .required(false)
                         .help("partition number (see info command)"),
                 )
                 .arg(
-                    Arg::with_name("output")
-                        .takes_value(true)
-                        .short("o")
+                    Arg::new("output")
+                        .num_args(1)
+                        .short('o')
                         .required(true)
                         .help("Output file"),
                 ),
         )
         .subcommand(
-            SubCommand::with_name("decrypt").about("Decrypt DMG").arg(
-                Arg::with_name("output")
-                    .takes_value(true)
-                    .short("o")
+            Command::new("decrypt").about("Decrypt DMG").arg(
+                Arg::new("output")
+                    .num_args(1)
+                    .short('o')
                     .required(true)
                     .help("Path to write output"),
             ),
@@ -72,32 +77,32 @@ fn main() {
         .get_matches();
 
     // open input file
-    let in_file = matches.value_of("INPUT").unwrap();
+    let in_file = matches.get_one::<String>("INPUT").unwrap();
     let in_path = Path::new(in_file);
-    let input = match File::open(&in_path) {
+    let input = match File::open(in_path) {
         Err(why) => error(format!("could not open input file - {}", why)),
         Ok(file) => file,
     };
 
-    let verbosity = match matches.is_present("quiet") {
+    let verbosity = match matches.get_flag("quiet") {
         true => Verbosity::None,
-        false => match matches.occurrences_of("v") {
+        false => match matches.get_count("v") {
             0 => Verbosity::Info,
             _ => Verbosity::Debug,
         },
     };
 
     if let Some(decrypt_args) = matches.subcommand_matches("decrypt") {
-        let password = match matches.value_of("password") {
+        let password = match matches.get_one::<String>("password") {
             Some(val) => val,
             None => error("no password supplied".to_string()),
         };
-        let out_file = decrypt_args.value_of("output").unwrap();
+        let out_file = decrypt_args.get_one::<String>("output").unwrap();
 
         decrypt(verbosity, input, out_file, password);
     } else {
         // if a password is supplied, use it do create an EncryptedDmgReader
-        let input_real: Box<dyn ReadNSeek> = match matches.value_of("password") {
+        let input_real: Box<dyn ReadNSeek> = match matches.get_one::<String>("password") {
             None => Box::new(input),
             Some(password) => match EncryptedDmgReader::from_reader(input, password, verbosity) {
                 Ok(reader) => Box::new(reader),
@@ -118,8 +123,9 @@ fn main() {
         if matches.subcommand_matches("info").is_some() {
             info(wiz, verbosity);
         } else if let Some(matches) = matches.subcommand_matches("extract") {
-            let out_file = matches.value_of("output").unwrap();
-            extract(&mut wiz, out_file, matches.value_of("partition"));
+            let out_file = matches.get_one::<String>("output").unwrap();
+            let partition = matches.get_one::<String>("partition");
+            extract(&mut wiz, out_file, partition.map(|s| s.as_str()));
         }
     }
 }
@@ -127,7 +133,7 @@ fn main() {
 fn decrypt(verbosity: Verbosity, input: File, out_file: &str, password: &str) {
     // open output file
     let out_path = Path::new(out_file);
-    let output = match File::create(&out_path) {
+    let output = match File::create(out_path) {
         Err(why) => error(format!("could not open output file - {}", why)),
         Ok(file) => file,
     };
@@ -170,7 +176,7 @@ fn extract(
 ) {
     // open output file
     let out_path = Path::new(out_file);
-    let output = match File::create(&out_path) {
+    let output = match File::create(out_path) {
         Err(why) => error(format!("could not open ouput file - {}", why)),
         Ok(file) => file,
     };

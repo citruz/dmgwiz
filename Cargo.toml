@@ -12,7 +12,7 @@ categories = ["command-line-utilities", "encoding", "filesystem", "parsing"]
 
 [dependencies]
 itertools = "0.9"
-clap = "2"
+clap = { version = "4.4", optional = true }
 bincode = "1"
 byteorder = "1"
 serde = { version = "1", features = ["derive"] }
@@ -40,8 +40,9 @@ path = "src/lib.rs"
 [[bin]]
 name = "dmgwiz"
 path = "src/main.rs"
-required-features = ["crypto"]
+required-features = ["crypto", "cli"]
 
 [features]
-default = ["crypto"]
-crypto = ["openssl", "ring"]
+default = ["cli", "crypto"]
+cli = ["dep:clap"]
+crypto = ["dep:openssl", "dep:ring"]

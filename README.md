@@ -34,7 +34,7 @@ CLI Usage
 **extract**
 
     dmgwiz <INPUT> extract [-n <partition number>] -o <output>
-    
+
 
 Crate Usage
 -----------

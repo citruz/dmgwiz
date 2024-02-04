@@ -5,7 +5,7 @@ use std::io::BufWriter;
 use std::path::Path;
 use std::process;
 
-use clap::{Arg, ArgAction, Command};
+use clap::{arg, Command};
 
 use dmgwiz::{DmgWiz, EncryptedDmgReader, Verbosity};
 
@@ -17,115 +17,115 @@ fn error(msg: String) -> ! {
     process::exit(1);
 }
 
+#[derive(PartialEq, Debug, Copy, Clone)]
+pub enum Action {
+    Info,
+    Extract,
+    Decrypt,
+}
+
+fn common_args(password_req: bool) -> Vec<clap::Arg> {
+    let mut password_help = "Password for encrypted DMGs".to_owned();
+    if password_req {
+        password_help.push_str(" (required)");
+    }
+    vec![
+        arg!(<INPUT> "Input file to read"),
+        arg!(-p --password <PASSWORD>)
+            .required(password_req)
+            .help(password_help),
+    ]
+}
+
 fn main() {
     let matches = Command::new("dmgwiz")
         .version("0.2.4")
         .author("Felix Seele <fseele@gmail.com>")
         .about("Extract filesystem data from DMG files")
-        .arg(
-            Arg::new("INPUT")
-                .help("Sets the input file to use")
-                .required(true)
-                .index(1),
+        .subcommand_required(true)
+        .arg_required_else_help(true)
+        .arg(arg!(-q --quiet "Only print errors"))
+        .arg(arg!(-v --verbose ... "Level of verbosity (multiple allowed)"))
+        .subcommand(
+            Command::new("info")
+                .about("Print DMG partitions")
+                .args(common_args(false))
+                .arg_required_else_help(true),
         )
-        .arg(
-            Arg::new("quiet")
-                .short('q')
-                .action(ArgAction::SetTrue)
-                .help("Only print errors"),
-        )
-        .arg(
-            Arg::new("v")
-                .short('v')
-                .action(ArgAction::Count)
-                .help("Sets the level of verbosity (multiple allowed)"),
-        )
-        .arg(
-            Arg::new("password")
-                .short('p')
-                .num_args(1)
-                .help("Password for encrypted DMGs"),
-        )
-        .subcommand(Command::new("info").about("Print DMG partitions"))
         .subcommand(
             Command::new("extract")
                 .about("Extract single or all partitions")
-                .arg(
-                    Arg::new("partition")
-                        .num_args(1)
-                        .short('n')
-                        .required(false)
-                        .help("partition number (see info command)"),
-                )
-                .arg(
-                    Arg::new("output")
-                        .num_args(1)
-                        .short('o')
-                        .required(true)
-                        .help("Output file"),
-                ),
+                .arg_required_else_help(true)
+                .args(common_args(false))
+                .arg(arg!(<OUTPUT> "Output file"))
+                .arg(arg!(-n --partition <PARTITION> "Partition number (see info command). By default all partitions will be extracted."))
         )
         .subcommand(
-            Command::new("decrypt").about("Decrypt DMG").arg(
-                Arg::new("output")
-                    .num_args(1)
-                    .short('o')
-                    .required(true)
-                    .help("Path to write output"),
-            ),
+            Command::new("decrypt")
+                .about("Decrypt DMG")
+                .arg_required_else_help(true)
+                .args(common_args(true))
+                .arg(arg!(<OUTPUT> "Output file"))
         )
         .get_matches();
 
+    let verbosity = match matches.get_flag("quiet") {
+        true => Verbosity::None,
+        false => match matches.get_count("verbose") {
+            0 => Verbosity::Info,
+            _ => Verbosity::Debug,
+        },
+    };
+
+    let (action, sub_matches) = match matches.subcommand() {
+        Some(("info", sub_matches)) => (Action::Info, sub_matches),
+        Some(("extract", sub_matches)) => (Action::Extract, sub_matches),
+        Some(("decrypt", sub_matches)) => (Action::Decrypt, sub_matches),
+        _ => unreachable!(),
+    };
+
     // open input file
-    let in_file = matches.get_one::<String>("INPUT").unwrap();
+    let in_file = sub_matches.get_one::<String>("INPUT").unwrap();
     let in_path = Path::new(in_file);
     let input = match File::open(in_path) {
         Err(why) => error(format!("could not open input file - {}", why)),
         Ok(file) => file,
     };
 
-    let verbosity = match matches.get_flag("quiet") {
-        true => Verbosity::None,
-        false => match matches.get_count("v") {
-            0 => Verbosity::Info,
-            _ => Verbosity::Debug,
-        },
-    };
-
-    if let Some(decrypt_args) = matches.subcommand_matches("decrypt") {
-        let password = match matches.get_one::<String>("password") {
-            Some(val) => val,
-            None => error("no password supplied".to_string()),
-        };
-        let out_file = decrypt_args.get_one::<String>("output").unwrap();
+    if action == Action::Decrypt {
+        let password = sub_matches.get_one::<String>("password").unwrap();
+        let out_file = sub_matches.get_one::<String>("OUTPUT").unwrap();
 
         decrypt(verbosity, input, out_file, password);
     } else {
         // if a password is supplied, use it do create an EncryptedDmgReader
-        let input_real: Box<dyn ReadNSeek> = match matches.get_one::<String>("password") {
+        let input_real: Box<dyn ReadNSeek> = match sub_matches.get_one::<String>("password") {
             None => Box::new(input),
             Some(password) => match EncryptedDmgReader::from_reader(input, password, verbosity) {
                 Ok(reader) => Box::new(reader),
                 Err(err) => error(format!("{}", err)),
             },
         };
+
         // read dmg
         let buf_reader = &mut BufReader::new(input_real);
         let mut wiz = match DmgWiz::from_reader(buf_reader, verbosity) {
             Err(err) => match err {
                 dmgwiz::Error::Encrypted => error(
-                    "dmg is encrypted, please use the -p option and provide a password".to_string(),
+                    "dmg is encrypted, please use the -p option to provide a password".to_string(),
                 ),
                 _ => error(format!("could not read input file - {}", err)),
             },
             Ok(val) => val,
         };
-        if matches.subcommand_matches("info").is_some() {
+        if action == Action::Info {
             info(wiz, verbosity);
-        } else if let Some(matches) = matches.subcommand_matches("extract") {
-            let out_file = matches.get_one::<String>("output").unwrap();
-            let partition = matches.get_one::<String>("partition");
+        } else if action == Action::Extract {
+            let out_file = sub_matches.get_one::<String>("OUTPUT").unwrap();
+            let partition = sub_matches.get_one::<String>("partition");
             extract(&mut wiz, out_file, partition.map(|s| s.as_str()));
+        } else {
+            panic!("should not be reached")
         }
     }
 }

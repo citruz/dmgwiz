@@ -16,24 +16,55 @@ DmgWiz is both a CLI tool and a Rust crate so it can be integrated into other pr
 CLI Usage
 ---------
 
-    dmgwiz [OPTIONS] <INPUT> [SUBCOMMAND]
+    dmgwiz [OPTIONS] <COMMAND>
 
-    OPTIONS:
-    -q               Only print errors
-    -v               Sets the level of verbosity (multiple allowed)
-    -p <password>    Password for encrypted DMGs
+    Commands:
+      info     Print DMG partitions
+      extract  Extract single or all partitions
+      decrypt  Decrypt DMG
+      help     Print this message or the help of the given subcommand(s)
+
+    Global options (must be placed before subcommand):
+      -q, --quiet       Only print errors
+      -v, --verbose...  Level of verbosity (multiple allowed)
+      -h, --help        Print help
+      -V, --version     Print version
 
 **info**
 
-    dmgwiz <INPUT> info
+    dmgwiz info [OPTIONS] <INPUT>
+
+    Arguments:
+      <INPUT>  Input file to read
+
+    Options:
+      -p, --password <PASSWORD>  Password for encrypted DMGs
+      -h, --help                 Print help
 
 **decrypt**
 
-    dmgwiz <INPUT> decrypt -o <output> -p <password>
+    dmgwiz decrypt --password <PASSWORD> <INPUT> <OUTPUT>
+
+    Arguments:
+      <INPUT>   Input file to read
+      <OUTPUT>  Output file
+
+    Options:
+      -p, --password <PASSWORD>  Password for encrypted DMGs (required)
+      -h, --help                 Print help
 
 **extract**
 
-    dmgwiz <INPUT> extract [-n <partition number>] -o <output>
+    dmgwiz extract [OPTIONS] <INPUT> <OUTPUT>
+
+    Arguments:
+      <INPUT>   Input file to read
+      <OUTPUT>  Output file
+
+    Options:
+      -p, --password <PASSWORD>    Password for encrypted DMGs
+      -n, --partition <PARTITION>  Partition number (see info command). By default all partitions will be extracted.
+      -h, --help                   Print help
 
 
 Crate Usage

@@ -11,19 +11,19 @@ keywords = ["DMG", "Apple"]
 categories = ["command-line-utilities", "encoding", "filesystem", "parsing"]
 
 [dependencies]
-itertools = "0.9"
+itertools = "0.13"
 clap = { version = "4.4", optional = true }
 bincode = "1"
 byteorder = "1"
 serde = { version = "1", features = ["derive"] }
-ring = { version = "0.16", optional = true }
+ring = { version = "0.17", optional = true }
 plist = "1.5"
 num-traits = "0.2"
-num-derive = "0.3"
+num-derive = "0.4"
 flate2 = "1"
 bzip2 = "0.4"
 adc = "0.2"
-lzfse = "0.1"
+lzfse = "0.2"
 
 [dependencies.openssl]
 version = "0.10"

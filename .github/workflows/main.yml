@@ -70,7 +70,7 @@ jobs:
       shell: bash
     - name: Upload artifacts
       if: startsWith(matrix.rust, 'stable')
-      uses: actions/upload-artifact@v1
+      uses: actions/upload-artifact@v4
       with:
         name: dmgwiz_release_${{ matrix.build }}
         path: ./target/release/

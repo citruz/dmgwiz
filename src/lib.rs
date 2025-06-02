@@ -5,14 +5,14 @@ use flate2::read::ZlibDecoder;
 use itertools::Itertools;
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
+use quick_xml::{events::Event, Reader};
 use serde::{Deserialize, Serialize};
 use std::cmp;
 use std::cmp::Ordering;
 use std::fmt;
 use std::io;
 use std::io::prelude::*;
-use std::io::Cursor;
-use std::io::SeekFrom;
+use std::io::{BufReader, Cursor, SeekFrom};
 
 mod crypto;
 mod error;
@@ -355,7 +355,19 @@ where
         // read plist
         input.seek(SeekFrom::Start(header.xml_offset))?;
         let partial_reader = input.by_ref().take(header.xml_length);
-        let mut plist = plist::Value::from_reader_xml(partial_reader)?;
+
+        // Find the valid XML content and trim off any garbage data at the end
+        // This is necessary because some XML data from the header includes trailing garbage
+        // that isn't valid XML. The plist crate strictly requires well-formed XML and will
+        // fail with an error if it encounters this garbage data. By finding the exact end
+        // of the valid XML structure first, we can extract just the well-formed portion
+        // and avoid parsing errors.
+        let valid_length = find_valid_xml_offset(partial_reader)?;
+
+        // parse plist
+        input.seek(SeekFrom::Start(header.xml_offset))?;
+        let valid_reader = input.by_ref().take(valid_length as u64);
+        let mut plist = plist::Value::from_reader_xml(valid_reader)?;
 
         // get partitions from dict
         let partitions_arr = plist
@@ -639,4 +651,41 @@ fn write_zero<W: Write>(w: &mut W, len: usize) -> Result<usize> {
 fn copy<R: Read, W: Write>(src: &mut R, dest: &mut W) -> Result<usize> {
     let len = io::copy(src, dest)?;
     Ok(len as usize)
+}
+
+/// The function reads through the XML data tracking element nesting depth, and identifies when
+/// the root element properly closes. It returns only the position to the end of the valid XML
+/// document, effectively ignoring any trailing non-XML data.
+fn find_valid_xml_offset<R: Read>(input: R) -> Result<usize> {
+    let buf_reader = BufReader::new(input);
+    let mut xml_reader = Reader::from_reader(buf_reader);
+    xml_reader.config_mut().trim_text(false);
+
+    let mut depth = 0;
+    let mut last_valid_position = 0;
+    let mut root_element_name = Vec::new();
+    let mut buf = Vec::new();
+
+    loop {
+        match xml_reader.read_event_into(&mut buf) {
+            Ok(Event::Start(ref e)) => {
+                depth += 1;
+                if depth == 1 {
+                    root_element_name = e.name().into_inner().to_vec();
+                }
+            }
+            Ok(Event::End(ref e)) => {
+                if depth == 1 && e.name().into_inner() == root_element_name.as_slice() {
+                    last_valid_position = xml_reader.buffer_position();
+                }
+                depth -= 1;
+            }
+            Ok(Event::Eof) => break,
+            Err(e) => return Err(Error::Parse(Box::new(e))),
+            _ => (),
+        }
+        buf.clear();
+    }
+
+    Ok(last_valid_position as usize)
 }

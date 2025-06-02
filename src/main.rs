@@ -39,7 +39,7 @@ fn common_args(password_req: bool) -> Vec<clap::Arg> {
 
 fn main() {
     let matches = Command::new("dmgwiz")
-        .version("0.2.4")
+        .version("1.1.0")
         .author("Felix Seele <fseele@gmail.com>")
         .about("Extract filesystem data from DMG files")
         .subcommand_required(true)

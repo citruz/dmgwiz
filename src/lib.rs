@@ -663,20 +663,21 @@ fn find_valid_xml_offset<R: Read>(input: R) -> Result<usize> {
 
     let mut depth = 0;
     let mut last_valid_position = 0;
-    let mut root_element_name = Vec::new();
+    let mut root_element_started = false;
     let mut buf = Vec::new();
 
     loop {
         match xml_reader.read_event_into(&mut buf) {
-            Ok(Event::Start(ref e)) => {
+            Ok(Event::Start(..)) => {
                 depth += 1;
                 if depth == 1 {
-                    root_element_name = e.name().into_inner().to_vec();
+                    root_element_started = true;
                 }
             }
-            Ok(Event::End(ref e)) => {
-                if depth == 1 && e.name().into_inner() == root_element_name.as_slice() {
+            Ok(Event::End(..)) => {
+                if depth == 1 && root_element_started {
                     last_valid_position = xml_reader.buffer_position();
+                    break;
                 }
                 depth -= 1;
             }
@@ -688,4 +689,88 @@ fn find_valid_xml_offset<R: Read>(input: R) -> Result<usize> {
     }
 
     Ok(last_valid_position as usize)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    macro_rules! test_xml_offset {
+        ($test_name:ident, $input_xml:expr, $expected_xml_prefix:expr) => {
+            #[test]
+            fn $test_name() {
+                let xml_data = $input_xml;
+                let first_root_end_str = $expected_xml_prefix;
+                let expected_pos = first_root_end_str.len();
+
+                let cursor = Cursor::new(xml_data.as_bytes());
+
+                let pos = find_valid_xml_offset(cursor).unwrap();
+
+                assert_eq!(pos, expected_pos);
+            }
+        };
+    }
+
+    #[test]
+    fn test_find_offset_with_trailing_ascii_garbage() {
+        let base_xml = "<root><item>Content</item><another_item/></root>";
+        let expected_pos = base_xml.len();
+
+        for i in 0..=127u8 {
+            let garbage_char = i as char;
+            let mut test_data_bytes = base_xml.as_bytes().to_vec();
+            test_data_bytes.push(i);
+
+            let cursor = Cursor::new(test_data_bytes.clone());
+
+            let pos = find_valid_xml_offset(cursor).unwrap();
+            assert_eq!(
+                pos,
+                expected_pos,
+                "Test failed for ASCII byte {byte_val} ('{char_repr}'). Expected position {expected}, got {actual}. Input (Bytes): {input:?}",
+                byte_val = i,
+                char_repr = if i >= 32 && i <= 126 { garbage_char.to_string() } else { "NonPrintable".to_string() },
+                expected = expected_pos,
+                actual = pos,
+                input = test_data_bytes
+            );
+        }
+    }
+
+    #[test]
+    fn test_find_offset_with_multiple_roots() {
+        let xml_data = "<foo>Some Content</foo><qux/>";
+        let first_root_end_str = "<foo>Some Content</foo>";
+        let expected_pos = first_root_end_str.len();
+
+        let cursor = Cursor::new(xml_data.as_bytes());
+
+        let pos = find_valid_xml_offset(cursor).unwrap();
+        assert_eq!(pos, expected_pos);
+    }
+
+    test_xml_offset!(
+        test_multiple_roots_qux,
+        "<foo>Some Content</foo><qux/>",
+        "<foo>Some Content</foo>"
+    );
+
+    test_xml_offset!(
+        test_multiple_roots_bar,
+        "<foo>First Element</foo><bar>Second Element</bar>",
+        "<foo>First Element</foo>"
+    );
+
+    test_xml_offset!(
+        test_unclosed_root_tag,
+        "<foo>",
+        "" // zero-length string indicates no valid XML found
+    );
+
+    test_xml_offset!(
+        test_no_xml_content,
+        "this is just some text without angle brackets",
+        ""
+    );
 }

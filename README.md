@@ -81,6 +81,12 @@ dmgwiz = {version = "0.2", default-features = false}
 Changelog
 ---------
 
+1.1.0
+- Made XML parsing more robust by ignoring trailing garbage data.
+
+1.0.0
+- Refactored CLI so that the argument order or more intuitive: First global options (verbose, quiet), then subcommand, then options.
+
 0.2.4
 - Fixed parsing of XML with plist 1.5
 

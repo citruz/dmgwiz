@@ -5,7 +5,7 @@ DmgWiz
 
 DmgWiz lets you extract raw filesystem data from compressed and encrypted DMG files. It started as a [dmg2img](http://vu1tur.eu.org/tools/) clone but has more features and is more secure due to the Rust programming language.
 
-- Support for adc, zlib, bzip2 and lzfse compression
+- Support for adc, zlib, bzip2, lzfse and lzma compression
 - Support for encrypted DMGs (AES-128 and AES-256)
 - Runs on Windows, Linux, macOS
 
@@ -115,4 +115,3 @@ References
 TODO
 ----
 - verify checksums in DMG
-- add support for LZMA ("ULMO")

@@ -111,6 +111,7 @@ pub enum ChunkType {
     ZLIB = 0x80000005,
     BZLIB = 0x80000006,
     LZFSE = 0x80000007,
+    LZMA = 0x80000008,
 
     Term = 0xffffffff,
 }
@@ -562,6 +563,7 @@ where
                 ChunkType::ZLIB => decode_zlib(&mut chunk_input, &mut output),
                 ChunkType::BZLIB => decode_bzlib(&mut chunk_input, &mut output),
                 ChunkType::LZFSE => decode_lzfse(&mut chunk_input, &mut output, out_len),
+                ChunkType::LZMA => decode_lzma(&mut chunk_input, &mut output),
                 ChunkType::Term => unreachable!(),
             };
 
@@ -634,6 +636,16 @@ fn decode_lzfse<R: Read, W: Write>(src: &mut R, dest: &mut W, dest_size: usize) 
 
     dest.write_all(&out_buf[..dest_size])?;
     Ok(len)
+}
+
+fn decode_lzma<R: Read, W: Write>(src: &mut R, dest: &mut W) -> Result<usize> {
+    let mut input = BufReader::new(src);
+    let mut out_buf = Vec::new();
+    // UDIF "LZMA" chunks are actually XZ streams (magic "\xfd7zXZ\x00").
+    lzma_rs::xz_decompress(&mut input, &mut out_buf)
+        .map_err(|_| Error::InvalidInput("lzma decompression failed".into()))?;
+    dest.write_all(&out_buf)?;
+    Ok(out_buf.len())
 }
 
 fn decode_adc<R: Read, W: Write>(src: &mut R, dest: &mut W) -> Result<usize> {

@@ -24,6 +24,7 @@ flate2 = "1"
 bzip2 = "0.4"
 adc = "0.2"
 lzfse = "0.2"
+lzma-rs = "0.3"
 quick-xml = "0.37.5"
 
 [dependencies.openssl]

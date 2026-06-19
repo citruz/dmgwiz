@@ -55,8 +55,6 @@ fn test_extract_all_lzfse() {
 }
 
 #[test]
-#[should_panic(expected = "unknown chunk type 0x80000008")]
-// lzma support is not implemented yet
 fn test_extract_all_lzma() {
     extract_all_test("tests/input_lzma.dmg", "tests/tmp_output_lzma.bin")
 }

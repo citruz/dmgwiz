@@ -13,6 +13,10 @@ use ring::pbkdf2;
 
 static PBKDF2_ALG: pbkdf2::Algorithm = pbkdf2::PBKDF2_HMAC_SHA1;
 
+/// CSSM algorithm identifiers used in the keyblob descriptor.
+const CSSM_ALGID_3DES_3KEY_EDE: u32 = 17;
+const CSSM_ALGID_AES: u32 = 0x8000_0001;
+
 use super::header::EncryptedDmgHeader;
 use crate::{Error, Result, Verbosity};
 
@@ -28,7 +32,8 @@ macro_rules! printDebug {
 /// Reader to read from encrypted DMGs
 ///
 /// Use this to transparently read from encrypted DMGs.
-/// Support AES-128 and AES-256 encryption.
+/// Supports AES-128 and AES-256 data encryption, with the keyblob wrapped
+/// using either 3DES-EDE3 or AES.
 ///
 /// See `main.rs` for a real-world example.
 pub struct EncryptedDmgReader<R> {
@@ -93,19 +98,30 @@ where
             )));
         }
 
-        if header.blob_enc_algorithm != 17
-            || header.blob_enc_mode != 6
-            || header.blob_enc_padding != 7
-        {
+        if header.blob_enc_mode != 6 || header.blob_enc_padding != 7 {
             return Err(Error::UnsupportedEncryption(format!(
-                "unsupported blob encryption parameters algorithm={} mode={} padding={}",
-                header.blob_enc_algorithm, header.blob_enc_mode, header.blob_enc_padding
+                "unsupported blob encryption parameters mode={} padding={}",
+                header.blob_enc_mode, header.blob_enc_padding
             )));
         }
 
-        // generate 3des key from password
-        let derived_key = Self::derive_key(&header, password)?;
-        let keyblob = Self::decrypt_keyblob(&header, &derived_key)?;
+        // Older images wrap the keyblob with 3DES-EDE3, newer ones with AES.
+        let blob_cipher = match (header.blob_enc_algorithm, header.blob_enc_key_bits) {
+            (CSSM_ALGID_3DES_3KEY_EDE, 192) => Cipher::des_ede3_cbc(),
+            (CSSM_ALGID_AES, 128) => Cipher::aes_128_cbc(),
+            (CSSM_ALGID_AES, 192) => Cipher::aes_192_cbc(),
+            (CSSM_ALGID_AES, 256) => Cipher::aes_256_cbc(),
+            (algorithm, key_bits) => {
+                return Err(Error::UnsupportedEncryption(format!(
+                    "unsupported blob encryption parameters algorithm={} key_bits={}",
+                    algorithm, key_bits
+                )))
+            }
+        };
+
+        // derive the key-wrapping key from the password
+        let derived_key = Self::derive_key(&header, password, blob_cipher.key_len())?;
+        let keyblob = Self::decrypt_keyblob(&header, blob_cipher, &derived_key)?;
 
         // extract aes and hmac keys
         let aes_key_size: usize = header.data_enc_key_bits as usize / 8;
@@ -190,7 +206,7 @@ where
         Ok(bytes_written)
     }
 
-    fn derive_key(header: &EncryptedDmgHeader, password: &str) -> Result<Vec<u8>> {
+    fn derive_key(header: &EncryptedDmgHeader, password: &str, key_len: usize) -> Result<Vec<u8>> {
         if header.kdf_algorithm != 103
             || header.kdf_prng_algorithm != 0
             || header.kdf_salt_len != 20
@@ -205,7 +221,7 @@ where
         let iterations = NonZeroU32::new(header.kdf_iteration_count)
             .ok_or_else(|| Error::UnsupportedEncryption("iterations cannot be zero".to_string()))?;
 
-        let mut derived_key = [0u8; 24];
+        let mut derived_key = vec![0u8; key_len];
         pbkdf2::derive(
             PBKDF2_ALG,
             iterations,
@@ -214,13 +230,22 @@ where
             &mut derived_key,
         );
 
-        Ok(derived_key.to_vec())
+        Ok(derived_key)
     }
 
-    fn decrypt_keyblob(header: &EncryptedDmgHeader, key: &[u8]) -> Result<Vec<u8>> {
-        let cipher = Cipher::des_ede3_cbc();
-        let mut iv = header.blob_enc_iv.to_vec();
-        iv.truncate(header.blob_enc_iv_size.try_into().unwrap());
+    fn decrypt_keyblob(header: &EncryptedDmgHeader, cipher: Cipher, key: &[u8]) -> Result<Vec<u8>> {
+        // Images advertise an 8-byte IV, which is the 3DES block size. AES needs 16, so
+        // the advertised bytes get zero-extended to the cipher's IV length
+        let iv_len = cipher.iv_len().unwrap_or_default();
+        let advertised_iv_len: usize = header.blob_enc_iv_size.try_into().unwrap();
+        if advertised_iv_len > cmp::min(iv_len, header.blob_enc_iv.len()) {
+            return Err(Error::UnsupportedEncryption(format!(
+                "blob encryption IV size {} is too large",
+                advertised_iv_len
+            )));
+        }
+        let mut iv = vec![0u8; iv_len];
+        iv[..advertised_iv_len].copy_from_slice(&header.blob_enc_iv[..advertised_iv_len]);
 
         // rust does not support static array of > 32 elements
         let mut encrypted_keyblob = [

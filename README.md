@@ -81,6 +81,9 @@ dmgwiz = {version = "0.2", default-features = false}
 Changelog
 ---------
 
+1.1.1
+- Bump quick-xml to 0.42.0
+
 1.1.0
 - Made XML parsing more robust by ignoring trailing garbage data.
 

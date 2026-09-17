@@ -27,7 +27,7 @@ lzfse = "0.2"
 quick-xml = "0.40.0"
 
 [dependencies.openssl]
-version = "0.10"
+version = "0.10.81"
 features = ["vendored"]
 optional = true
 

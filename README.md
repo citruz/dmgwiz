@@ -83,6 +83,7 @@ Changelog
 
 1.1.1
 - Bump quick-xml to 0.42.0
+- Bump openssl to 0.10.81
 
 1.1.0
 - Made XML parsing more robust by ignoring trailing garbage data.

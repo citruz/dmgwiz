@@ -81,6 +81,9 @@ dmgwiz = {version = "0.2", default-features = false}
 Changelog
 ---------
 
+1.1.2
+- Bump openssl to 0.10.81
+
 1.1.1
 - Bump quick-xml to 0.42.0
 

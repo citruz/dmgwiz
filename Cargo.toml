@@ -24,7 +24,7 @@ flate2 = "1"
 bzip2 = "0.4"
 adc = "0.2"
 lzfse = "0.2"
-quick-xml = "0.40.0"
+quick-xml = "0.42.0"
 
 [dependencies.openssl]
 version = "0.10.81"

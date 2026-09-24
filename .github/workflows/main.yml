@@ -19,7 +19,7 @@ jobs:
             os: ubuntu-latest
             rust: nightly
           - build: macos-x86
-            os: macos-13
+            os: macos-15-intel
             rust: stable
           - build: macos-arm64
             os: macos-latest
